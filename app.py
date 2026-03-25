@@ -62,7 +62,7 @@ COOKIE_PASSWORD = (
     or "change-this-cookie-password"
 )
 
-QUIZ_DURATION_MINUTES = 19
+QUIZ_DURATION_MINUTES = 23
 WARNING_MINUTES = 5
 
 RESULTS_COLLECTION = "exam_results"
@@ -347,7 +347,87 @@ else:
         "answer": "An infinite loop occurs, continuously printing the row header and the inner loop values.",
     },
     {
-        "id": 21,
+    "id": 21,
+    "question": "Match each strftime format code with its correct output.",
+    "type": "dropdown_sim",
+    "code": """from datetime import datetime
+
+    d = datetime(2026, 3, 23)""",
+        "dropdowns": [
+            {
+                "label": 'strftime("%A")',
+                "options": ["Monday", "March", "20"],
+                "answer": "Monday",
+            },
+            {
+                "label": 'strftime("%B")',
+                "options": ["Monday", "March", "20"],
+                "answer": "March",
+            },
+            {
+                "label": 'strftime("%C")',
+                "options": ["20", "03", "2026"],
+                "answer": "20",
+            }
+        ],
+        "answer": ["Monday", "March", "20"],
+    },
+    {
+    "id": 22,
+    "question": """What is the output of the following Python code?
+
+    from datetime import datetime
+
+    d = datetime(2026, 3, 23)
+    result = d.strftime("%A")
+
+    print(result)""",
+        "type": "mc",
+        "options": [
+            "A. Monday",
+            "B. 03",
+            "C. March",
+            "D. 26"
+        ],
+        "answer": "A. Monday",
+    },
+    {
+    "id": 23,
+    "question": """What is the output of the following Python code?
+
+    name = "Alex"
+    score = 85
+
+    result = f"{name} scored {score}%"
+    print(result)""",
+        "type": "mc",
+        "options": [
+            "A. Alex scored 85%",
+            "B. Alex scored score%",
+            "C. name scored 85%",
+            "D. Alex scored 85"
+        ],
+        "answer": "A. Alex scored 85%",
+    },
+    {
+    "id": 24,
+    "question": "Complete the Python string formatting to display the number with two decimal places.",
+    "type": "dropdown_sim",
+    "code": """value = 3.14159
+
+    formatted = f"{value:[DROPDOWN]}"
+    print(formatted)""",
+        "dropdowns": [
+            {
+                "label": "Format specifier",
+                "options": [".2f", ".2d", ".2s", ".2%"],
+                "answer": ".2f",
+            }
+        ],
+        "answer": [".2f"],
+    },
+    {
+        "id": 25,
         "question": """You are writing code that generates a random integer with a minimum value of 5 and a maximum value of 11.
 Which two functions should you use? Each correct answer presents a complete solution. (Choose two.)""",
         "type": "mc_multi",
