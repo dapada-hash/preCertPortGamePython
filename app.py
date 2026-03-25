@@ -2,7 +2,7 @@ import os
 import json
 import random
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 import requests
 import streamlit as st
@@ -397,15 +397,6 @@ st.markdown(
         margin: 20px 0;
     }
 
-    .header-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-bottom: 2px solid #eee;
-        padding-bottom: 15px;
-        margin-bottom: 25px;
-    }
-
     .header-title {
         color: var(--primary-color);
         margin: 0;
@@ -417,6 +408,7 @@ st.markdown(
         font-size: 1.5em;
         font-weight: bold;
         color: var(--incorrect-color);
+        text-align: right;
     }
 
     .status-bar {
@@ -498,6 +490,289 @@ st.markdown(
 )
 
 # =================================================
+# COOKIE SETUP
+# =================================================
+cookies = None
+if COOKIE_MANAGER_AVAILABLE:
+    try:
+        cookies = EncryptedCookieManager(
+            prefix="final_exam_",
+            password=COOKIE_PASSWORD,
+        )
+        if not cookies.ready():
+            st.stop()
+    except Exception:
+        cookies = None
+
+# =================================================
+# FIREBASE HELPERS
+# =================================================
+def now_utc():
+    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+
+def parse_service_account(raw_value):
+    if not raw_value:
+        return None
+    if isinstance(raw_value, dict):
+        return raw_value
+    if isinstance(raw_value, str):
+        cleaned = raw_value.strip()
+        if cleaned.startswith("'''") and cleaned.endswith("'''"):
+            cleaned = cleaned[3:-3].strip()
+        elif cleaned.startswith('"""') and cleaned.endswith('"""'):
+            cleaned = cleaned[3:-3].strip()
+        return json.loads(cleaned)
+    raise ValueError("FIREBASE_SERVICE_ACCOUNT_JSON must be a JSON string or dict.")
+
+
+@st.cache_resource
+def get_firestore_client():
+    creds_dict = parse_service_account(FIREBASE_SERVICE_ACCOUNT_JSON)
+    if not creds_dict:
+        raise ValueError("Missing FIREBASE_SERVICE_ACCOUNT_JSON in secrets.")
+
+    if not firebase_admin._apps:
+        cred = credentials.Certificate(creds_dict)
+        firebase_admin.initialize_app(cred)
+
+    return firestore.client()
+
+
+def db():
+    return get_firestore_client()
+
+
+def get_teacher_emails():
+    raw = str(TEACHER_EMAILS_RAW or "").strip()
+    if not raw:
+        return set()
+    return {x.strip().lower() for x in raw.split(",") if x.strip()}
+
+
+def firebase_sign_in_email_password(email: str, password: str):
+    get_firestore_client()
+
+    if not FIREBASE_WEB_API_KEY.strip():
+        raise ValueError("Missing FIREBASE_WEB_API_KEY in secrets.")
+
+    url = (
+        "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
+        f"?key={FIREBASE_WEB_API_KEY}"
+    )
+    payload = {
+        "email": email,
+        "password": password,
+        "returnSecureToken": True,
+    }
+
+    resp = requests.post(url, json=payload, timeout=20)
+    data = resp.json()
+
+    if resp.status_code != 200:
+        err_msg = data.get("error", {}).get("message", "Authentication failed.")
+        raise ValueError(err_msg)
+
+    id_token = data.get("idToken", "")
+    refresh_token = data.get("refreshToken", "")
+    local_id = data.get("localId", "")
+
+    if not id_token:
+        raise ValueError("No Firebase ID token returned.")
+
+    return {
+        "id_token": id_token,
+        "refresh_token": refresh_token,
+        "local_id": local_id,
+    }
+
+
+def verify_firebase_id_token(id_token: str):
+    get_firestore_client()
+    return firebase_auth.verify_id_token(id_token)
+
+
+def create_firebase_session_cookie(id_token: str, expires_days: int = 5):
+    get_firestore_client()
+    expires_in_seconds = expires_days * 24 * 60 * 60
+    return firebase_auth.create_session_cookie(
+        id_token,
+        expires_in=expires_in_seconds
+    )
+
+
+def verify_firebase_session_cookie(session_cookie: str):
+    get_firestore_client()
+    return firebase_auth.verify_session_cookie(session_cookie, check_revoked=True)
+
+
+def persist_auth_cookie(id_token: str):
+    if cookies is None:
+        return
+    session_cookie = create_firebase_session_cookie(id_token, expires_days=5)
+    cookies["firebase_session"] = session_cookie
+    cookies.save()
+
+
+def restore_auth_from_cookie():
+    if cookies is None:
+        return False
+
+    session_cookie = cookies.get("firebase_session", "")
+    if not session_cookie:
+        return False
+
+    try:
+        decoded = verify_firebase_session_cookie(session_cookie)
+        email = str(decoded.get("email", "")).strip().lower()
+        teacher_emails = get_teacher_emails()
+
+        st.session_state.auth_verified = True
+        st.session_state.auth_user = {
+            "uid": decoded.get("uid", ""),
+            "email": email,
+            "email_verified": bool(decoded.get("email_verified", False)),
+            "is_teacher": email in teacher_emails,
+        }
+        st.session_state.is_teacher = email in teacher_emails
+        return True
+    except Exception:
+        try:
+            cookies["firebase_session"] = ""
+            cookies.save()
+        except Exception:
+            pass
+        return False
+
+# =================================================
+# DATA HELPERS
+# =================================================
+def get_student_profile(uid: str):
+    if not uid:
+        return None
+
+    snap = db().collection(STUDENT_PROFILES_COLLECTION).document(uid).get()
+    if not snap.exists:
+        return None
+
+    data = snap.to_dict() or {}
+    if not data.get("active", True):
+        return None
+
+    data["uid"] = snap.id
+    return data
+
+
+def load_student_profiles():
+    docs = db().collection(STUDENT_PROFILES_COLLECTION).stream()
+    rows = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data["uid"] = doc.id
+        rows.append(data)
+    return rows
+
+
+def create_student_account_and_profile(
+    email: str,
+    password: str,
+    first_name: str,
+    student_id: str,
+    period: str,
+    active: bool = True,
+):
+    get_firestore_client()
+
+    email = email.strip().lower()
+    first_name = first_name.strip()
+    student_id = str(student_id).strip()
+    period = period.strip()
+
+    if not email:
+        raise ValueError("Student email is required.")
+    if not password or len(password) < 6:
+        raise ValueError("Password must be at least 6 characters.")
+    if not first_name:
+        raise ValueError("First name is required.")
+    if not student_id.isdigit():
+        raise ValueError("Student ID must be numeric.")
+    if not period:
+        raise ValueError("Period is required.")
+
+    existing_profiles = db().collection(STUDENT_PROFILES_COLLECTION).where("student_id", "==", student_id).limit(1).stream()
+    if any(True for _ in existing_profiles):
+        raise ValueError(f"Student ID {student_id} already exists.")
+
+    existing_email_profiles = db().collection(STUDENT_PROFILES_COLLECTION).where("email", "==", email).limit(1).stream()
+    if any(True for _ in existing_email_profiles):
+        raise ValueError(f"Email {email} already exists in student profiles.")
+
+    user = firebase_auth.create_user(
+        email=email,
+        password=password,
+        display_name=first_name,
+    )
+    uid = user.uid
+
+    db().collection(STUDENT_PROFILES_COLLECTION).document(uid).set({
+        "uid": uid,
+        "email": email,
+        "first_name": first_name,
+        "student_id": student_id,
+        "period": period,
+        "display_name": f"{first_name}-{student_id}",
+        "active": bool(active),
+        "created_utc": now_utc(),
+    })
+
+    return {
+        "uid": uid,
+        "email": email,
+        "display_name": f"{first_name}-{student_id}",
+    }
+
+
+def save_exam_result(student_profile: dict, score: int, total_questions: int, timed_out: bool):
+    if not student_profile:
+        raise ValueError("Missing student profile.")
+
+    percentage = round((score / total_questions) * 100, 2) if total_questions else 0.0
+
+    db().collection(RESULTS_COLLECTION).add({
+        "uid": student_profile.get("uid", ""),
+        "student_name": student_profile.get("first_name", ""),
+        "student_id": student_profile.get("student_id", ""),
+        "period": student_profile.get("period", ""),
+        "email": student_profile.get("email", ""),
+        "score": int(score),
+        "total_questions": int(total_questions),
+        "percentage": percentage,
+        "timed_out": bool(timed_out),
+        "submitted_utc": now_utc(),
+        "quiz_title": "Python Final Exam",
+    })
+
+
+def load_exam_results():
+    docs = (
+        db()
+        .collection(RESULTS_COLLECTION)
+        .order_by("submitted_utc", direction=firestore.Query.DESCENDING)
+        .stream()
+    )
+    rows = []
+    for doc in docs:
+        rows.append(doc.to_dict() or {})
+    return rows
+
+
+def load_my_exam_results(uid: str):
+    docs = db().collection(RESULTS_COLLECTION).where("uid", "==", uid).stream()
+    rows = [doc.to_dict() or {} for doc in docs]
+    rows.sort(key=lambda x: x.get("submitted_utc", ""), reverse=True)
+    return rows
+
+# =================================================
 # ATTEMPT PERSISTENCE
 # =================================================
 def attempt_ref(uid: str):
@@ -523,36 +798,6 @@ def clear_exam_attempt(uid: str):
     except Exception:
         pass
 
-
-def restore_attempt_to_session(uid: str):
-    attempt = load_exam_attempt(uid)
-    if not attempt:
-        return
-
-    if attempt.get("finished", False):
-        st.session_state.exam_started = False
-        st.session_state.exam_finished = True
-        st.session_state.started_at = attempt.get("started_at_epoch")
-        st.session_state.current_question_index = attempt.get("current_question_index", 0)
-        st.session_state.score = attempt.get("score", 0)
-        st.session_state.question_order = attempt.get("question_order", [])
-        st.session_state.answers = attempt.get("answers", {})
-        st.session_state.feedback = None
-        st.session_state.saved_result = attempt.get("saved_result", False)
-        st.session_state.warning_shown = attempt.get("warning_shown", False)
-        return
-
-    st.session_state.exam_started = True
-    st.session_state.exam_finished = False
-    st.session_state.started_at = attempt.get("started_at_epoch")
-    st.session_state.current_question_index = attempt.get("current_question_index", 0)
-    st.session_state.score = attempt.get("score", 0)
-    st.session_state.question_order = attempt.get("question_order", [])
-    st.session_state.answers = attempt.get("answers", {})
-    st.session_state.feedback = None
-    st.session_state.saved_result = attempt.get("saved_result", False)
-    st.session_state.warning_shown = attempt.get("warning_shown", False)
-
 # =================================================
 # SESSION STATE
 # =================================================
@@ -567,6 +812,21 @@ def reset_exam_state():
     st.session_state.feedback = None
     st.session_state.saved_result = False
     st.session_state.warning_shown = False
+
+
+def sign_out():
+    st.session_state.auth_verified = False
+    st.session_state.auth_user = None
+    st.session_state.is_teacher = False
+    st.session_state.student_profile = None
+    reset_exam_state()
+
+    if cookies is not None:
+        try:
+            cookies["firebase_session"] = ""
+            cookies.save()
+        except Exception:
+            pass
 
 
 st.session_state.setdefault("auth_verified", False)
@@ -640,7 +900,7 @@ with st.sidebar:
         st.rerun()
 
 # =================================================
-# LOAD STUDENT PROFILE
+# LOAD STUDENT PROFILE / RESTORE ATTEMPT
 # =================================================
 auth_user = st.session_state.auth_user or {}
 auth_uid = str(auth_user.get("uid", "")).strip()
@@ -653,9 +913,19 @@ if not is_teacher_user:
         st.stop()
     st.session_state.student_profile = profile
 
-    # restore persisted attempt if needed
-    if not st.session_state.exam_started and not st.session_state.exam_finished:
-        restore_attempt_to_session(auth_uid)
+    # restore persisted attempt on login/refresh
+    existing_attempt = load_exam_attempt(auth_uid)
+    if existing_attempt:
+        st.session_state.exam_started = not bool(existing_attempt.get("finished", False))
+        st.session_state.exam_finished = bool(existing_attempt.get("finished", False))
+        st.session_state.started_at = existing_attempt.get("started_at_epoch")
+        st.session_state.current_question_index = int(existing_attempt.get("current_question_index", 0))
+        st.session_state.score = int(existing_attempt.get("score", 0))
+        st.session_state.question_order = existing_attempt.get("question_order", [])
+        st.session_state.answers = existing_attempt.get("answers", {}) or {}
+        st.session_state.saved_result = bool(existing_attempt.get("saved_result", False))
+        st.session_state.warning_shown = bool(existing_attempt.get("warning_shown", False))
+        st.session_state.feedback = None
 
 # =================================================
 # HELPERS
@@ -715,20 +985,15 @@ def finish_exam(timed_out: bool = False):
 def get_remaining_seconds():
     if not st.session_state.started_at:
         return QUIZ_DURATION_MINUTES * 60
-    elapsed = int(time.time() - st.session_state.started_at)
+    elapsed = int(time.time() - float(st.session_state.started_at))
     remaining = (QUIZ_DURATION_MINUTES * 60) - elapsed
     return max(0, remaining)
 
 
 def render_js_timer():
     remaining = get_remaining_seconds()
-    warn_seconds = WARNING_MINUTES * 60
 
-    if remaining <= 0 and st.session_state.exam_started:
-        finish_exam(timed_out=True)
-        st.rerun()
-
-    if remaining <= warn_seconds and not st.session_state.warning_shown and st.session_state.exam_started:
+    if remaining <= WARNING_MINUTES * 60 and not st.session_state.warning_shown and st.session_state.exam_started:
         st.session_state.warning_shown = True
         save_exam_attempt(auth_uid, {"warning_shown": True})
 
@@ -844,11 +1109,9 @@ def submit_answer():
         }
     else:
         if question["type"] == "mc":
-            correct_display = question["answer"]
-            msg = f"❌ Incorrect. The correct answer was: {correct_display}"
+            msg = f"❌ Incorrect. The correct answer was: {question['answer']}"
         else:
-            correct_display = question["answer"]
-            msg = f"❌ Incorrect. The correct answer(s) were: {correct_display}"
+            msg = f"❌ Incorrect. The correct answer(s) were: {question['answer']}"
         st.session_state.feedback = {
             "type": "incorrect",
             "message": msg,
@@ -882,7 +1145,6 @@ def next_question():
             "finished": False,
         })
 
-
 # =================================================
 # MAIN LAYOUT
 # =================================================
@@ -891,19 +1153,9 @@ st.markdown('<div class="quiz-shell">', unsafe_allow_html=True)
 if is_teacher_user:
     left_col, right_col = st.columns([3, 1])
     with left_col:
-        st.markdown(
-            """
-            <div class="header-title">Python Final Exam - Teacher Dashboard</div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.markdown('<div class="header-title">Python Final Exam - Teacher Dashboard</div>', unsafe_allow_html=True)
     with right_col:
-        st.markdown(
-            """
-            <div class="timer-box">Teacher</div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.markdown('<div class="timer-box">Teacher</div>', unsafe_allow_html=True)
 
     st.markdown(
         '<div class="status-bar">Teacher access enabled. Create student accounts and review final exam scores.</div>',
@@ -992,24 +1244,17 @@ else:
 
     header_left, header_right = st.columns([3, 1])
     with header_left:
-        st.markdown(
-            """
-            <div class="header-title">Python Final Exam</div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.markdown('<div class="header-title">Python Final Exam</div>', unsafe_allow_html=True)
     with header_right:
         if st.session_state.exam_started:
             render_js_timer()
         else:
             st.markdown(
-                f"""
-                <div class="timer-box">{QUIZ_DURATION_MINUTES:02d}:00</div>
-                """,
+                f'<div class="timer-box">{QUIZ_DURATION_MINUTES:02d}:00</div>',
                 unsafe_allow_html=True,
             )
 
-    # force timeout check on each rerun
+    # force timeout check on every rerun
     if st.session_state.exam_started and get_remaining_seconds() <= 0:
         finish_exam(timed_out=True)
         st.rerun()
@@ -1149,6 +1394,7 @@ else:
             clear_exam_attempt(auth_uid)
             reset_exam_state()
             st.rerun()
+
         st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown("</div>", unsafe_allow_html=True)
