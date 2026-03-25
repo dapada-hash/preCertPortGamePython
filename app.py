@@ -62,7 +62,7 @@ COOKIE_PASSWORD = (
     or "change-this-cookie-password"
 )
 
-QUIZ_DURATION_MINUTES = 18
+QUIZ_DURATION_MINUTES = 19
 WARNING_MINUTES = 5
 
 RESULTS_COLLECTION = "exam_results"
