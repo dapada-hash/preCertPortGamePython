@@ -1282,6 +1282,9 @@ else:
         st.write(f"You have **{QUIZ_DURATION_MINUTES} minutes** to complete the exam.")
         st.write("If you refresh or close the browser, the timer keeps running.")
         st.write("Your score will be saved automatically when you finish or when time runs out.")
+
+        st.error("⚠️ FINAL EXAM WARNING: Read each question carefully. After you submit an answer, you cannot go back and change it.")
+
         if st.button("Start Final Exam", use_container_width=True):
             start_exam()
             st.rerun()
