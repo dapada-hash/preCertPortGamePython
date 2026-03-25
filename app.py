@@ -2,7 +2,7 @@ import os
 import json
 import random
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import requests
 import streamlit as st
@@ -65,6 +65,11 @@ QUIZ_DURATION_MINUTES = 18
 WARNING_MINUTES = 5
 RESULTS_COLLECTION = "exam_results"
 STUDENT_PROFILES_COLLECTION = "student_profiles"
+
+PERIOD_OPTIONS = [
+    "Period 1", "Period 2", "Period 3", "Period 4",
+    "Period 5", "Period 6", "Period 7", "Period 8", "Other"
+]
 
 # =================================================
 # QUIZ QUESTIONS (FALLBACK ONLY)
@@ -389,14 +394,6 @@ st.markdown(
         margin: 20px 0;
     }
 
-    .loading-gate {
-        text-align: center;
-        padding: 50px;
-        font-size: 1.2em;
-        color: var(--secondary-color);
-        font-weight: bold;
-    }
-
     .header-row {
         display: flex;
         justify-content: space-between;
@@ -492,10 +489,6 @@ st.markdown(
         border-radius: 8px;
         background-color: #f1f3f5;
     }
-
-    div[data-testid="stRadio"] label, div[data-testid="stCheckbox"] label {
-        font-size: 1rem !important;
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -515,7 +508,6 @@ if COOKIE_MANAGER_AVAILABLE:
             st.stop()
     except Exception:
         cookies = None
-
 
 # =================================================
 # FIREBASE HELPERS
@@ -560,6 +552,8 @@ def get_teacher_emails():
 
 
 def firebase_sign_in_email_password(email: str, password: str):
+    get_firestore_client()
+
     if not FIREBASE_WEB_API_KEY.strip():
         raise ValueError("Missing FIREBASE_WEB_API_KEY in secrets.")
 
@@ -595,10 +589,12 @@ def firebase_sign_in_email_password(email: str, password: str):
 
 
 def verify_firebase_id_token(id_token: str):
+    get_firestore_client()
     return firebase_auth.verify_id_token(id_token)
 
 
 def create_firebase_session_cookie(id_token: str, expires_days: int = 5):
+    get_firestore_client()
     expires_in_seconds = expires_days * 24 * 60 * 60
     return firebase_auth.create_session_cookie(
         id_token,
@@ -607,6 +603,7 @@ def create_firebase_session_cookie(id_token: str, expires_days: int = 5):
 
 
 def verify_firebase_session_cookie(session_cookie: str):
+    get_firestore_client()
     return firebase_auth.verify_session_cookie(session_cookie, check_revoked=True)
 
 
@@ -653,16 +650,8 @@ def sign_out():
     st.session_state.auth_verified = False
     st.session_state.auth_user = None
     st.session_state.is_teacher = False
-    st.session_state.exam_started = False
-    st.session_state.exam_finished = False
-    st.session_state.current_question_index = 0
-    st.session_state.score = 0
-    st.session_state.question_order = []
-    st.session_state.answers = {}
-    st.session_state.feedback = None
-    st.session_state.saved_result = False
-    st.session_state.warning_shown = False
-    st.session_state.started_at = None
+    st.session_state.student_profile = None
+    reset_exam_state()
 
     if cookies is not None:
         try:
@@ -670,7 +659,6 @@ def sign_out():
             cookies.save()
         except Exception:
             pass
-
 
 # =================================================
 # DATA HELPERS
@@ -709,6 +697,8 @@ def create_student_account_and_profile(
     period: str,
     active: bool = True,
 ):
+    get_firestore_client()
+
     email = email.strip().lower()
     first_name = first_name.strip()
     student_id = str(student_id).strip()
@@ -792,13 +782,37 @@ def load_exam_results():
     return rows
 
 
+def load_my_exam_results(uid: str):
+    docs = (
+        db()
+        .collection(RESULTS_COLLECTION)
+        .where("uid", "==", uid)
+        .stream()
+    )
+    rows = [doc.to_dict() or {} for doc in docs]
+    rows.sort(key=lambda x: x.get("submitted_utc", ""), reverse=True)
+    return rows
+
+
 def now_utc():
     return datetime.utcnow().isoformat(timespec="seconds") + "Z"
-
 
 # =================================================
 # SESSION STATE
 # =================================================
+def reset_exam_state():
+    st.session_state.exam_started = False
+    st.session_state.exam_finished = False
+    st.session_state.started_at = None
+    st.session_state.current_question_index = 0
+    st.session_state.score = 0
+    st.session_state.question_order = []
+    st.session_state.answers = {}
+    st.session_state.feedback = None
+    st.session_state.saved_result = False
+    st.session_state.warning_shown = False
+
+
 st.session_state.setdefault("auth_verified", False)
 st.session_state.setdefault("auth_user", None)
 st.session_state.setdefault("is_teacher", False)
@@ -1040,20 +1054,6 @@ def next_question():
         st.session_state.current_question_index += 1
         st.session_state.feedback = None
 
-
-def restart_exam():
-    st.session_state.exam_started = False
-    st.session_state.exam_finished = False
-    st.session_state.current_question_index = 0
-    st.session_state.score = 0
-    st.session_state.question_order = []
-    st.session_state.answers = {}
-    st.session_state.feedback = None
-    st.session_state.saved_result = False
-    st.session_state.warning_shown = False
-    st.session_state.started_at = None
-
-
 # =================================================
 # MAIN LAYOUT
 # =================================================
@@ -1083,10 +1083,7 @@ if is_teacher_user:
             new_first_name = st.text_input("First Name")
         with c2:
             new_student_id = st.text_input("Student ID")
-            new_period = st.selectbox("Class / Period", [
-                "Period 1", "Period 2", "Period 3", "Period 4",
-                "Period 5", "Period 6", "Period 7", "Period 8", "Other"
-            ])
+            new_period = st.selectbox("Class / Period", PERIOD_OPTIONS)
             new_active = st.checkbox("Active", value=True)
 
         create_submit = st.form_submit_button("Create Student Account")
@@ -1154,7 +1151,6 @@ if is_teacher_user:
 
 else:
     student_profile = st.session_state.student_profile
-
     timer_text = render_timer() if st.session_state.exam_started else f"{QUIZ_DURATION_MINUTES:02d}:00"
 
     st.markdown(
@@ -1172,6 +1168,17 @@ else:
             f'<div class="status-bar">{student_profile.get("first_name", "")} | ID: {student_profile.get("student_id", "")} | {student_profile.get("period", "")}</div>',
             unsafe_allow_html=True,
         )
+
+        try:
+            my_results = load_my_exam_results(auth_uid)
+            if my_results:
+                latest = my_results[0]
+                st.info(
+                    f"Previous saved score: {latest.get('score', 0)} / {latest.get('total_questions', 0)} "
+                    f"({latest.get('percentage', 0)}%)"
+                )
+        except Exception:
+            pass
 
         st.markdown('<div class="question-box">', unsafe_allow_html=True)
         st.markdown('<div class="question-title">Final Exam Instructions</div>', unsafe_allow_html=True)
@@ -1268,8 +1275,17 @@ else:
         st.write(f"Your final score is: **{st.session_state.score}** out of **{len(QUIZ_QUESTIONS)}**.")
         st.write(f"Percentage: **{percentage}%**")
         st.write(message)
+
+        try:
+            my_results = load_my_exam_results(auth_uid)
+            if my_results:
+                latest = my_results[0]
+                st.write(f"Saved score record: **{latest.get('score', 0)} / {latest.get('total_questions', 0)}**")
+        except Exception:
+            pass
+
         if st.button("Start New Exam", use_container_width=True):
-            restart_exam()
+            reset_exam_state()
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
