@@ -383,6 +383,7 @@ print(result)""",
         "options": ["A. Alex scored 85%", "B. Alex scored score%", "C. name scored 85%", "D. Alex scored 85"],
         "answer": "A. Alex scored 85%",
     },
+    
     {
         "id": 24,
         "question": "Complete the Python string formatting to display the number with two decimal places.",
@@ -415,6 +416,18 @@ Which two functions should you use? Each correct answer presents a complete solu
             "C. random.randrange(5, 12, 1)",
         ],
     },
+    {
+    "id": 26,
+    "question": "What is the output of the following Python code?<br><br>&nbsp;&nbsp;&nbsp;&nbsp;items = ['apple', 'banana', 'cherry']<br>&nbsp;&nbsp;&nbsp;&nbsp;items.append('date')<br>&nbsp;&nbsp;&nbsp;&nbsp;items.insert(1, 'blueberry')<br>&nbsp;&nbsp;&nbsp;&nbsp;print(items[2])",
+    "type": "mc",
+    "options": [
+        "A. blueberry",
+        "B. banana",
+        "C. cherry",
+        "D. apple"
+    ],
+    "answer": "B. banana"
+},
 ]
 
 # =================================================
