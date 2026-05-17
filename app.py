@@ -712,7 +712,7 @@ def clear_exam_attempt(auth_uid: str):
 
 def save_final_exam_result(auth_uid: str, student_profile: dict, score: int, total: int, timed_out=False):
     try:
-        percentage = round((score / total) * 100, 2) if total > 0 else 0.0
+        percentage = round((score / total) * 100, 1) if total > 0 else 0.0
         doc_id = f"{auth_uid}_{int(time.time())}"
         
         first_name = student_profile.get("first_name", "")
@@ -1010,9 +1010,10 @@ if st.session_state.is_teacher:
         raw_results = load_all_exam_results()
         if raw_results:
             df = pd.DataFrame(raw_results)
+            # Strict layout reordering to precisely match the target design
             preferred_cols = [
                 "period", "student_id", "student_name", "student_email", 
-                "percentage", "score", "total_questions", "timed_out", "submitted_at"
+                "percentage", "score"
             ]
             existing_cols = [c for c in preferred_cols if c in df.columns]
             other_cols = [c for c in df.columns if c not in preferred_cols]
@@ -1047,7 +1048,7 @@ else:
         except Exception:
             pass
 
-        percentage = round((display_score / len(QUIZ_QUESTIONS)) * 100, 2) if QUIZ_QUESTIONS else 0.0
+        percentage = round((display_score / len(QUIZ_QUESTIONS)) * 100, 1) if QUIZ_QUESTIONS else 0.0
         msg = "🎉 Perfect score! Masterful job!" if percentage == 100 else ("👍 Excellent work! You have passed the certification standard threshold!" if percentage >= 84 else "📚 Evaluation complete. You did not meet the passing standard threshold.")
 
         st.markdown('<div class="result-box"><h2>Exam Evaluation Complete</h2>', unsafe_allow_html=True)
