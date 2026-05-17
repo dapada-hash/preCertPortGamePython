@@ -664,7 +664,14 @@ def upsert_student_profile(student_id: str, last_name: str, first_name: str, per
 def load_all_exam_results():
     try:
         docs = db().collection(RESULTS_COLLECTION).stream()
-        res = [dict(d.to_dict(), id=d.id) for d in docs]
+        res = []
+        for d in docs:
+            v = d.to_dict()
+            first = v.get("first_name", "")
+            last = v.get("last_name", "")
+            if "student_name" not in v:
+                v["student_name"] = f"{last}, {first}".strip(", ")
+            res.append(v)
         return sorted(res, key=lambda x: x.get("submitted_at", ""), reverse=True)
     except Exception:
         return []
@@ -707,11 +714,19 @@ def save_final_exam_result(auth_uid: str, student_profile: dict, score: int, tot
     try:
         percentage = round((score / total) * 100, 2) if total > 0 else 0.0
         doc_id = f"{auth_uid}_{int(time.time())}"
+        
+        first_name = student_profile.get("first_name", "")
+        last_name = student_profile.get("last_name", "")
+        full_name = f"{last_name}, {first_name}".strip(", ") if (first_name or last_name) else "Anonymous Student"
+        student_email = st.session_state.auth_user.get("email", "No Email Logged")
+
         payload = {
             "auth_uid": auth_uid,
             "student_id": student_profile.get("student_id", "UNKNOWN"),
-            "first_name": student_profile.get("first_name", ""),
-            "last_name": student_profile.get("last_name", ""),
+            "student_name": full_name,
+            "student_email": student_email,
+            "first_name": first_name,
+            "last_name": last_name,
             "period": student_profile.get("period", ""),
             "score": score,
             "total_questions": total,
@@ -901,7 +916,6 @@ if "exam_finished" not in st.session_state: st.session_state.exam_finished = Fal
 
 restore_auth_from_cookie()
 
-# SECURE CLOUD GATEWAY LOGIC INTERCEPT
 if st.session_state.auth_verified and st.session_state.auth_user and not st.session_state.is_teacher:
     uid = st.session_state.auth_user["uid"]
     my_results = load_my_exam_results(uid)
@@ -954,9 +968,6 @@ if not st.session_state.is_teacher and st.session_state.student_profile is None:
         "student_id": "STU-" + auth_uid[:6].upper(), "first_name": user_email.split("@")[0], "last_name": "Profile", "period": "Unassigned"
     }
 
-# ====================================================================
-# PROACTIVE PERSISTENCE ENGINE (Recovers progress on reload)
-# ====================================================================
 if st.session_state.auth_verified and not st.session_state.is_teacher and not st.session_state.exam_finished:
     attempt = load_exam_attempt(auth_uid)
     if attempt:
@@ -965,7 +976,6 @@ if st.session_state.auth_verified and not st.session_state.is_teacher and not st
         allowed_seconds = QUIZ_DURATION_MINUTES * 60
         
         if elapsed < allowed_seconds:
-            # The test is still active! Re-populate state completely.
             st.session_state.exam_started = True
             st.session_state.start_time_epoch = start_epoch
             st.session_state.current_question_index = int(attempt.get("current_question_index", 0))
@@ -974,12 +984,10 @@ if st.session_state.auth_verified and not st.session_state.is_teacher and not st
             st.session_state.warning_shown = attempt.get("warning_shown", False)
             st.session_state.feedback = attempt.get("feedback", None)
         else:
-            # Time ran out while the browser was closed! Commit progress.
             st.session_state.score = int(attempt.get("score", 0))
             finish_exam(timed_out=True)
             st.rerun()
 
-# BACKGROUND TIMEOUT ENFORCER
 if st.session_state.exam_started and get_remaining_seconds() <= 0:
     finish_exam(timed_out=True)
     st.rerun()
@@ -998,7 +1006,21 @@ if st.session_state.is_teacher:
     st.markdown("---")
     t_tabs = st.tabs(["Database Records Grid", "Active Exam Logs", "Roster Management Form"])
     with t_tabs[0]:
-        st.dataframe(load_all_exam_results(), use_container_width=True)
+        import pandas as pd
+        raw_results = load_all_exam_results()
+        if raw_results:
+            df = pd.DataFrame(raw_results)
+            preferred_cols = [
+                "period", "student_id", "student_name", "student_email", 
+                "percentage", "score", "total_questions", "timed_out", "submitted_at"
+            ]
+            existing_cols = [c for c in preferred_cols if c in df.columns]
+            other_cols = [c for c in df.columns if c not in preferred_cols]
+            df = df[existing_cols + other_cols]
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No exam submissions recorded yet.")
+            
     with t_tabs[1]:
         st.dataframe(load_student_profiles(), use_container_width=True)
 
@@ -1016,9 +1038,6 @@ else:
         else:
             st.markdown('<div class="timer-box" style="color:#6c757d;">Closed</div>' if st.session_state.exam_finished else f'<div class="timer-box">{QUIZ_DURATION_MINUTES:02d}:00</div>', unsafe_allow_html=True)
 
-    # =================================================
-    # VIEW 1: PRIORITY GATE - EXAM EVALUATION COMPLETE
-    # =================================================
     if st.session_state.exam_finished:
         display_score = st.session_state.score
         try:
@@ -1046,9 +1065,6 @@ else:
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # =================================================
-    # VIEW 2: INITIAL INSTRUCTIONS GATE
-    # =================================================
     elif not st.session_state.exam_started:
         st.markdown(f'<div class="status-bar">{student_profile.get("first_name", "")} | ID: {student_profile.get("student_id", "")} | {student_profile.get("period", "")}</div>', unsafe_allow_html=True)
         
@@ -1068,9 +1084,6 @@ else:
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # =================================================
-    # VIEW 3: ACTIVE EVALUATION PORTAL
-    # =================================================
     else:
         if not st.session_state.warning_shown and get_remaining_seconds() <= (WARNING_MINUTES * 60):
             st.session_state.warning_shown = True
@@ -1078,7 +1091,6 @@ else:
         if st.session_state.warning_shown:
             st.warning(f"⏱️ Warning: Only {WARNING_MINUTES} minutes remain in your exam window.")
 
-        # Fixed layout bar structure to show progress and live running metrics cleanly
         st.markdown(
             f'<div class="status-bar">Question {st.session_state.current_question_index + 1} of {len(QUIZ_QUESTIONS)} | Current Score: {st.session_state.score}</div>', 
             unsafe_allow_html=True
@@ -1102,9 +1114,6 @@ else:
                 for i, dd in enumerate(question["dropdowns"]): 
                     st.selectbox(dd["label"], [""] + dd["options"], key=f"q_{question['id']}_dd_{i}")
 
-            # =================================================
-            # RESTORED: IMMEDIATE SUBMISSION FEEDBACK BLOCK
-            # =================================================
             if st.session_state.feedback:
                 fb = st.session_state.feedback
                 if fb["type"] == "correct":
@@ -1114,7 +1123,6 @@ else:
                 else:
                     st.warning(fb["message"])
 
-            # Action routing buttons
             if str(question["id"]) not in st.session_state.answers:
                 if st.button("Submit Answer", use_container_width=True):
                     submit_answer()
