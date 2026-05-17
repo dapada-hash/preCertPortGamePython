@@ -123,7 +123,7 @@ text_to_write = "This line will be added to the end.\\n"
 
 if os.path.[DROPDOWN 1](file_name):
     print(f"File '{file_name}' exists. Append text.")
-    file = open(file_name, <u>DROPDOWN 1<u/>)
+    file = open(file_name, <u>DROPDOWN 2<u/>)
     [DROPDOWN 3](text_to_write)
     file.close()
 else:
