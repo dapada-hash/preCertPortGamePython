@@ -108,11 +108,11 @@ QUIZ_QUESTIONS = [
     },
     {
     "id": 3,
-    "question": "Given \n\tvalue1=9, \n\tvalue2=4, \n\twhat is the data type of A after the expression A = (value1 % value2 * 10) // 2.0** 3.0 + value2?",
+    "question": "Given <br>&nbsp;&nbsp;&nbsp;&nbsp;value1=9, <br>&nbsp;&nbsp;&nbsp;&nbsp;value2=4, <br>what is the data type of A after the expression A = (value1 % value2 * 10) // 2.0** 3.0 + value2?",
     "type": "mc",
     "options": ["18.0", "5.0", "18", "22.0"],
     "answer": "5.0"
-    },
+},
     {
         "id": 4,
         "question": "Complete the Python script below by selecting the correct options.",
