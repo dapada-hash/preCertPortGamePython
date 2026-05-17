@@ -1206,19 +1206,24 @@ else:
     st.markdown('<div class="quiz-shell">', unsafe_allow_html=True)
     student_profile = st.session_state.student_profile
 
+    # Layout Header
     header_left, header_right = st.columns([3, 1])
     with header_left:
         st.markdown('<div class="header-title">Python Final Exam</div>', unsafe_allow_html=True)
     with header_right:
-        if st.session_state.exam_started:
+        # Hide the timer numbers completely if the exam is over
+        if st.session_state.exam_started and not st.session_state.exam_finished:
             render_js_timer()
+        elif st.session_state.exam_finished:
+            st.markdown('<div class="timer-box" style="color: #6c757d;">Closed</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div class="timer-box">{QUIZ_DURATION_MINUTES:02d}:00</div>', unsafe_allow_html=True)
 
     # 1. CRITICAL PRIORITIZED TIMEOUT HANDLING LAYER
+    # If time runs out, it forces the exact same finish state as a manual submission
     if legacy_timeout_check or (st.session_state.exam_started and get_remaining_seconds() <= 0):
         finish_exam(timed_out=True)
-        st.rerun()  # Instantly breaks loop processing and re-renders direct to section #4 below
+        st.rerun()  
 
     # 2. INTRODUCTORY INSTRUCTIONS BAR LAYER
     if not st.session_state.exam_started and not st.session_state.exam_finished:
@@ -1254,7 +1259,6 @@ else:
 
     # 3. ACTIVE EVALUATION INTERACTIVE LAYER
     elif st.session_state.exam_started and not st.session_state.exam_finished:
-        # Check warning time boundary threshold
         if not st.session_state.warning_shown and get_remaining_seconds() <= (WARNING_MINUTES * 60):
             st.session_state.warning_shown = True
             push_session_attempt_to_cloud(auth_uid)
@@ -1272,9 +1276,9 @@ else:
 
         st.markdown('<div class="question-box">', unsafe_allow_html=True)
         st.markdown(
-    f'<div class="question-title">Q{st.session_state.current_question_index + 1}. {question["question"]}</div>',
-    unsafe_allow_html=True
-    )
+            f'<div class="question-title">Q{st.session_state.current_question_index + 1}. {question["question"]}</div>',
+            unsafe_allow_html=True
+        )
 
         if question["type"] == "mc":
             st.radio(
@@ -1337,7 +1341,7 @@ else:
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # 4. COMPLETED OR TIMED OUT VIEW RESULTS DISPLAY
+    # 4. EXAM EVALUATION COMPLETE SCREEN (Identical for finishes and timeouts)
     elif st.session_state.exam_finished:
         percentage = round((st.session_state.score / len(QUIZ_QUESTIONS)) * 100, 2) if QUIZ_QUESTIONS else 0.0
 
@@ -1350,10 +1354,6 @@ else:
 
         st.markdown('<div class="result-box">', unsafe_allow_html=True)
         st.markdown("<h2>Exam Evaluation Complete</h2>", unsafe_allow_html=True)
-        
-        # Display feedback if they hit a timeout flag
-        if st.session_state.get("timed_out"): 
-            st.error("⏰ Time ran out! Your active session session has closed and final states were compiled.")
 
         st.write(f"Your calculated score: **{st.session_state.score}** / **{len(QUIZ_QUESTIONS)}**")
         st.write(f"Final Percentage: **{percentage}%**")
@@ -1374,4 +1374,4 @@ else:
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("</div>", unsafe_allow_html=True)    
+    st.markdown("</div>", unsafe_allow_html=True) 
