@@ -427,6 +427,18 @@ Which two functions should you use? Each correct answer presents a complete solu
         "D. apple"
     ],
     "answer": "B. banana"
+    },
+    {
+    "id": 28,
+    "question": """What is the output of the following Python code?
+
+<br>&nbsp;&nbsp;&nbsp;&nbsp;total = 0
+<br>&nbsp;&nbsp;&nbsp;&nbsp;for i in range(1, 4):
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;total += i
+<br>&nbsp;&nbsp;&nbsp;&nbsp;print(total)""",
+    "type": "mc",
+    "options": ["A. 3", "B. 6", "C. 10", "D. 0"],
+    "answer": "B. 6",
 },
 ]
 
