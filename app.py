@@ -502,6 +502,26 @@ st.markdown(
         font-family: monospace;
     }
 
+    .feedback-good {
+        background-color: #d4edda;
+        color: var(--correct-color);
+        border: 1px solid #c3e6cb;
+        padding: 15px;
+        border-radius: 6px;
+        font-weight: bold;
+        margin-top: 10px;
+    }
+
+    .feedback-bad {
+        background-color: #f8d7da;
+        color: var(--incorrect-color);
+        border: 1px solid #f5c6cb;
+        padding: 15px;
+        border-radius: 6px;
+        font-weight: bold;
+        margin-top: 10px;
+    }
+
     .result-box {
         text-align: center;
         padding: 40px 20px;
@@ -813,6 +833,9 @@ def start_exam():
 
 
 def finish_exam(timed_out=False):
+    """
+    Forces instant database persistence regardless of incomplete or unsubmitted answers.
+    """
     st.session_state.exam_started = False
     st.session_state.exam_finished = True
     st.session_state.timed_out = timed_out
@@ -820,6 +843,7 @@ def finish_exam(timed_out=False):
     uid = st.session_state.auth_user["uid"]
     prof = st.session_state.student_profile or {"first_name": "Student", "last_name": "Profile"}
 
+    # Commit whatever score they currently hold directly to the cloud
     save_final_exam_result(
         auth_uid=uid,
         student_profile=prof,
@@ -896,15 +920,14 @@ if "exam_finished" not in st.session_state: st.session_state.exam_finished = Fal
 
 restore_auth_from_cookie()
 
-# SECURE CLOUD GATEWAY LOGIC INTERCEPT
-# Checking Firestore directly on reload acts as our backup boundary protection.
+# SECURE BACKEND INTERCEPT: Catch matching results in Firestore to protect UI boundaries
 if st.session_state.auth_verified and st.session_state.auth_user and not st.session_state.is_teacher:
     uid = st.session_state.auth_user["uid"]
     my_results = load_my_exam_results(uid)
     if my_results:
         st.session_state.exam_finished = True
         st.session_state.exam_started = False
-        st.session_state.score = int(my_results[0].get("score", 0))
+        st.session_state.score = my_results[0].get("score", 0)
 
 if "timed_out" not in st.session_state: st.session_state.timed_out = False
 if "start_time_epoch" not in st.session_state: st.session_state.start_time_epoch = 0.0
@@ -960,7 +983,7 @@ if st.session_state.exam_started and not st.session_state.answers:
         st.session_state.score = int(attempt.get("score", 0))
         st.session_state.answers = attempt.get("answers", {})
 
-# BACKGROUND TIMEOUT ENFORCER
+# CRITICAL BACKEND TIMEOUT DISPATCHER
 if st.session_state.exam_started and get_remaining_seconds() <= 0:
     finish_exam(timed_out=True)
     st.rerun()
@@ -1001,22 +1024,21 @@ else:
     # VIEW 1: PRIORITY GATE - EXAM EVALUATION COMPLETE
     # =================================================
     if st.session_state.exam_finished:
-        # Fetch directly from database data cache to completely protect against race reloads
-        display_score = st.session_state.score
-        try:
-            my_results = load_my_exam_results(auth_uid)
-            if my_results:
-                display_score = int(my_results[0].get("score", display_score))
-        except Exception:
-            pass
-
-        percentage = round((display_score / len(QUIZ_QUESTIONS)) * 100, 2) if QUIZ_QUESTIONS else 0.0
+        percentage = round((st.session_state.score / len(QUIZ_QUESTIONS)) * 100, 2) if QUIZ_QUESTIONS else 0.0
         msg = "🎉 Perfect score! Masterful job!" if percentage == 100 else ("👍 Excellent work! You have passed the certification standard threshold!" if percentage >= 82 else "📚 Evaluation complete. You did not meet the passing standard threshold.")
 
         st.markdown('<div class="result-box"><h2>Exam Evaluation Complete</h2>', unsafe_allow_html=True)
-        st.write(f"Your calculated score: **{display_score}** / **{len(QUIZ_QUESTIONS)}**")
+        st.write(f"Your calculated score: **{st.session_state.score}** / **{len(QUIZ_QUESTIONS)}**")
         st.write(f"Final Percentage: **{percentage}%**")
         st.markdown(f"### {msg}")
+
+        try:
+            my_results = load_my_exam_results(auth_uid)
+            if my_results:
+                latest = my_results[0]
+                st.write(f"Cloud verified log score: **{latest.get('score', 0)} / {latest.get('total_questions', 0)}**")
+        except Exception: 
+            pass
 
         if st.button("Start New Exam Attempt", use_container_width=True):
             try:
@@ -1029,14 +1051,25 @@ else:
         st.markdown("</div>", unsafe_allow_html=True)
 
     # =================================================
-    # VIEW 2: INITIAL INSTRUCTIONS GATE
+    # VIEW 2: INITIAL INSTRUCTIONS GATE (Not Started & Not Finished)
     # =================================================
     elif not st.session_state.exam_started:
         st.markdown(f'<div class="status-bar">{student_profile.get("first_name", "")} | ID: {student_profile.get("student_id", "")} | {student_profile.get("period", "")}</div>', unsafe_allow_html=True)
+        
+        try:
+            my_results = load_my_exam_results(auth_uid)
+            if my_results:
+                latest = my_results[0]
+                st.info(f"Previous saved score: {latest.get('score', 0)} / {latest.get('total_questions', 0)} ({latest.get('percentage', 0)}%)")
+        except Exception:
+            pass
+
         st.markdown('<div class="question-box"><div class="question-title">Final Exam Instructions</div>', unsafe_allow_html=True)
+        st.write("You will answer one question at a time.")
         st.write(f"You have **{QUIZ_DURATION_MINUTES} minutes** to complete the exam.")
         st.write("If you refresh or close the browser, the timer keeps running in the background.")
         st.write("Your score will be saved automatically when you finish or when time runs out.")
+        st.write("You need to score 82% or higher to pass the exam.")
         st.error("⚠️ FINAL EXAM WARNING: Read each question carefully. After you submit an answer, you cannot go back and change it.")
         
         if st.button("Start Final Exam", use_container_width=True):
@@ -1045,7 +1078,7 @@ else:
         st.markdown("</div>", unsafe_allow_html=True)
 
     # =================================================
-    # VIEW 3: ACTIVE EVALUATION PORTAL
+    # VIEW 3: ACTIVE EVALUATION PORTAL (Only runs if Exam Started)
     # =================================================
     else:
         if not st.session_state.warning_shown and get_remaining_seconds() <= (WARNING_MINUTES * 60):
@@ -1054,7 +1087,7 @@ else:
         if st.session_state.warning_shown:
             st.warning(f"⏱️ Warning: Only {WARNING_MINUTES} minutes remain in your exam window.")
 
-        st.markdown(f'<div class="status-bar">Question {st.session_state.current_question_index + 1} of {len(QUIZ_QUESTIONS)}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="status-bar">Question {st.session_state.current_question_index + 1} of {len(QUIZ_QUESTIONS)} | Current Score: {st.session_state.score}</div>', unsafe_allow_html=True)
         
         question = current_question()
         if question:
@@ -1063,9 +1096,11 @@ else:
             if question["type"] == "mc":
                 st.radio("Select one answer", question["options"], key=f"q_{question['id']}_radio", index=None, label_visibility="collapsed")
             elif question["type"] == "mc_multi":
+                st.write("Select two answers:")
                 for i, opt in enumerate(question["options"]): 
                     st.checkbox(opt, key=f"q_{question['id']}_check_{i}")
             elif question["type"] == "sequencing":
+                st.markdown('<div class="code-box">Arrange from top to bottom by selecting one item for each position.</div>', unsafe_allow_html=True)
                 for i in range(len(question["options"])): 
                     st.selectbox(f"Position {i + 1}", [""] + question["options"], key=f"q_{question['id']}_order_{i}")
             elif question["type"] == "dropdown_sim":
@@ -1075,7 +1110,12 @@ else:
                     st.selectbox(dd["label"], [""] + dd["options"], key=f"q_{question['id']}_dd_{i}")
 
             if st.session_state.feedback:
-                st.warning(st.session_state.feedback["message"])
+                if st.session_state.feedback["type"] == "correct":
+                    st.markdown(f'<div class="feedback-good">{st.session_state.feedback["message"]}</div>', unsafe_allow_html=True)
+                elif st.session_state.feedback["type"] == "incorrect":
+                    st.markdown(f'<div class="feedback-bad">{st.session_state.feedback["message"]}</div>', unsafe_allow_html=True)
+                elif st.session_state.feedback["type"] == "missing":
+                    st.warning(st.session_state.feedback["message"])
 
             if str(question["id"]) not in st.session_state.answers:
                 if st.button("Submit Answer", use_container_width=True):
@@ -1087,5 +1127,7 @@ else:
                     next_question()
                     st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.error("Error: Question data could not be parsed securely.")
 
     st.markdown("</div>", unsafe_allow_html=True)
