@@ -1272,9 +1272,9 @@ else:
 
         st.markdown('<div class="question-box">', unsafe_allow_html=True)
         st.markdown(
-            f'<div class="question-title">Q{st.session_state.current_question_index + 1}. {question["question"]}</div>',
-            unsafe_allow_html=True
-        )
+    f'<div class="question-title">Q{st.session_state.current_question_index + 1}. {question["question"]}</div>',
+    unsafe_allow_html=True
+    )
 
         if question["type"] == "mc":
             st.radio(
