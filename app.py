@@ -795,21 +795,37 @@ def render_js_timer():
     rem_sec = int(get_remaining_seconds())
     if rem_sec <= 0:
         return
+
     components.html(f"""
     <div id="t" style="font-size:1.5em; font-weight:bold; color:#dc3545; text-align:right; font-family:sans-serif;">00:00</div>
+
     <script>
         var s = {rem_sec};
+
         function u() {{
+
             if(s <= 0) {{
                 document.getElementById("t").innerHTML = "00:00";
-                setTimeout(function() {{ window.parent.location.reload(); }}, 300);
+
+                // Force immediate refresh to trigger auto-submit
+                window.parent.location.reload();
+
                 return;
             }}
-            var m = Math.floor(s / 60), sec = s % 60;
-            document.getElementById("t").innerHTML = (m<10?"0":"")+m+":"+(sec<10?"0":"")+sec;
+
+            var m = Math.floor(s / 60);
+            var sec = s % 60;
+
+            document.getElementById("t").innerHTML =
+                (m < 10 ? "0" : "") + m + ":" +
+                (sec < 10 ? "0" : "") + sec;
+
             s--;
         }}
-        u(); setInterval(u, 1000);
+
+        u();
+
+        setInterval(u, 1000);
     </script>
     """, height=45)
 
