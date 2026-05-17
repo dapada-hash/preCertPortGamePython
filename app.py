@@ -1098,7 +1098,7 @@ else:
         st.markdown('<div class="question-box"><div class="question-title">Final Exam Instructions</div>', unsafe_allow_html=True)
         st.write("You will answer one question at a time.")
         st.write(f"You have **{QUIZ_DURATION_MINUTES} minutes** to complete the exam.")
-        st.write("If you refresh or close the browser, the timer keeps running in the background.")
+        st.write("If you refresh or close the browser, even if you log out, the timer keeps running in the background.")
         st.write("Your score will be saved automatically when you finish the exam.")
         st.write("After you submit an answer, you will receive immediate feedback and your answer will be locked in for that question.")
         st.write("You can start the exam at any time, but once you begin, the timer will start and cannot be paused.")
