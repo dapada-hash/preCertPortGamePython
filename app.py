@@ -80,7 +80,7 @@ PERIOD_OPTIONS = [
 QUIZ_QUESTIONS = [
     {
         "id": 1,
-        "question": "Which of the following checks for value equality between two lists A = [1, 2, 3, 4], and B = ['a', 'b', 'c', 'd']?",
+        "question": "Which of the following checks for value equality between two lists A = [1, 2, 3, 4], and \n\tB = ['a', 'b', 'c', 'd']?",
         "type": "mc",
         "options": ["A = B", "A == B", "A is B", "A != B"],
         "answer": "A == B",
