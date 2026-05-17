@@ -653,6 +653,7 @@ def upsert_student_profile(student_id: str, last_name: str, first_name: str, per
             "student_id": student_id,
             "last_name": last_name,
             "first_name": first_name,
+            "email": st.session_state.auth_user["email"],
             "period": period,
             "updated_at": now_utc(),
         }, merge=True)
@@ -983,17 +984,22 @@ user_email = auth_user["email"]
 
 if not st.session_state.is_teacher and st.session_state.student_profile is None:
 
-    found_profile = get_student_profile_by_email(user_email)
+   found_profile = get_student_profile_by_email(user_email)
 
-    if found_profile:
-        st.session_state.student_profile = found_profile
-    else:
-        st.session_state.student_profile = {
-            "student_id": "STU-" + auth_uid[:6].upper(),
-            "first_name": "Student",
-            "last_name": "",
-            "period": "Unassigned"
-        }
+if found_profile:
+    st.session_state.student_profile = {
+        "student_id": found_profile.get("student_id", ""),
+        "first_name": found_profile.get("first_name", ""),
+        "last_name": found_profile.get("last_name", ""),
+        "period": found_profile.get("period", "Unassigned")
+    }
+else:
+    st.session_state.student_profile = {
+        "student_id": "STU-" + auth_uid[:6].upper(),
+        "first_name": "Student",
+        "last_name": "",
+        "period": "Unassigned"
+    }
 
 if st.session_state.auth_verified and not st.session_state.is_teacher and not st.session_state.exam_finished:
     attempt = load_exam_attempt(auth_uid)
