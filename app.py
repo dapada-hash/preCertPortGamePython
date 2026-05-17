@@ -1089,11 +1089,54 @@ def next_question():
 # =================================================
 # MAIN RENDER ENTRYWAY
 # =================================================
-init_session_states()
+# 1. Initialize structural baseline variables first
+if "auth_verified" not in st.session_state:
+    st.session_state.auth_verified = False
+if "auth_user" not in st.session_state:
+    st.session_state.auth_user = None
+if "is_teacher" not in st.session_state:
+    st.session_state.is_teacher = False
+if "student_profile" not in st.session_state:
+    st.session_state.student_profile = None
+
+if "exam_started" not in st.session_state:
+    st.session_state.exam_started = False
+if "exam_finished" not in st.session_state:
+    st.session_state.exam_finished = False
+
+# 2. Restore user authentication session context from local storage/cookies
 restore_auth_from_cookie()
+
+# 3. Secure Cloud Verification Synchronization (Ensures state persists through reloads)
+if st.session_state.auth_verified and st.session_state.auth_user and not st.session_state.is_teacher:
+    uid = st.session_state.auth_user["uid"]
+    my_results = load_my_exam_results(uid)
+    if my_results:
+        # Secure lockdown: If a record exists in Firestore, force state to finished
+        st.session_state.exam_finished = True
+        st.session_state.exam_started = False
+        st.session_state.score = my_results[0].get("score", 0)
+
+# 4. Initialize remaining interactive interface variables safely
+if "timed_out" not in st.session_state:
+    st.session_state.timed_out = False
+if "start_time_epoch" not in st.session_state:
+    st.session_state.start_time_epoch = 0.0
+if "current_question_index" not in st.session_state:
+    st.session_state.current_question_index = 0
+if "score" not in st.session_state:
+    st.session_state.score = 0
+if "answers" not in st.session_state:
+    st.session_state.answers = {}
+if "feedback" not in st.session_state:
+    st.session_state.feedback = None
+if "warning_shown" not in st.session_state:
+    st.session_state.warning_shown = False
+
 
 st.title("🐍 Advanced Programming Portal")
 
+# Unauthenticated Portal Gating
 if not st.session_state.auth_verified:
     st.subheader("Final Exam Portal Login")
     tab1, tab2 = st.tabs(["Sign In", "Create Student Profile"])
@@ -1133,8 +1176,9 @@ if not st.session_state.auth_verified:
                         st.success(f"Profile saved! Student ID '{reg_id}' is authorized. Switch tabs to login.")
     st.stop()
 
+
 # =================================================
-# AUTHENTICATED SYSTEM DASHBOARDS
+# AUTHENTICATED SYSTEM ROUTER
 # =================================================
 auth_user = st.session_state.auth_user
 auth_uid = auth_user["uid"]
@@ -1168,7 +1212,7 @@ with col_logout:
         reset_exam_state()
         st.rerun()
 
-# --- TEACHER VIEW ---
+# --- TEACHER ADMINISTRATIVE DASHBOARD ---
 if st.session_state.is_teacher:
     st.markdown("---")
     st.subheader("🛠️ Administrative Instructor Dashboard")
@@ -1206,7 +1250,7 @@ if st.session_state.is_teacher:
                 else:
                     st.error("Please fill all configuration elements.")
 
-# --- STUDENT VIEW ---
+# --- STUDENT INTERACTIVE WORKFLOW ---
 else:
     st.markdown('<div class="quiz-shell">', unsafe_allow_html=True)
     student_profile = st.session_state.student_profile
@@ -1222,13 +1266,13 @@ else:
         else:
             st.markdown(f'<div class="timer-box">{QUIZ_DURATION_MINUTES:02d}:00</div>', unsafe_allow_html=True)
 
-    # 1. CRITICAL PRIORITIZED TIMEOUT HANDLING LAYER
+    # 1. AIRTIGHT BACK-END TIMEOUT ENFORCEMENT
     if legacy_timeout_check or (st.session_state.exam_started and get_remaining_seconds() <= 0):
         finish_exam(timed_out=True)
         st.session_state.exam_finished = True  
         st.rerun()  
 
-    # 2. EXAM EVALUATION COMPLETE SCREEN (AIRTIGHT ROUTING PRIORITY #1)
+    # 2. PRIORITY VIEW: EXAM EVALUATION COMPLETE
     if st.session_state.exam_finished:
         percentage = round((st.session_state.score / len(QUIZ_QUESTIONS)) * 100, 2) if QUIZ_QUESTIONS else 0.0
 
@@ -1267,7 +1311,7 @@ else:
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # 3. INTRODUCTORY INSTRUCTIONS BAR LAYER (Only accessible if NOT finished)
+    # 3. SECONDARY VIEW: INTRODUCTORY INSTRUCTIONS (Only reachable if NOT finished)
     elif not st.session_state.exam_started and not st.session_state.exam_finished:
         st.markdown(
             f'<div class="status-bar">{student_profile.get("first_name", "")} | ID: {student_profile.get("student_id", "")} | {student_profile.get("period", "")}</div>',
@@ -1299,7 +1343,7 @@ else:
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # 4. ACTIVE EVALUATION INTERACTIVE LAYER
+    # 4. TERTIARY VIEW: ACTIVE QUESTIONS PORTAL
     elif st.session_state.exam_started and not st.session_state.exam_finished:
         if not st.session_state.warning_shown and get_remaining_seconds() <= (WARNING_MINUTES * 60):
             st.session_state.warning_shown = True
