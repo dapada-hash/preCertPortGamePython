@@ -312,7 +312,7 @@ else:
     },
     {
         "id": 18,
-        "character": "Which character left-aligns formatted output in a field?",
+        "question": "Which character left-aligns formatted output in a field?",
         "type": "mc",
         "options": [
             "^ (The Caret)",
@@ -347,49 +347,76 @@ else:
         "answer": "An infinite loop occurs, continuously printing the row header and the inner loop values.",
     },
     {
-        "id": 21,
-        "question": "Match each strftime format code with its correct output.",
-        "type": "dropdown_sim",
-        "code": """from datetime import datetime
-d = datetime(2026, 3, 23)""",
+    "id": 21,
+    "question": "Match each strftime format code with its correct output.",
+    "type": "dropdown_sim",
+    "code": """from datetime import datetime
+
+    d = datetime(2026, 3, 23)""",
         "dropdowns": [
-            {"label": 'strftime("%A")', "options": ["Monday", "March", "20"], "answer": "Monday"},
-            {"label": 'strftime("%B")', "options": ["Monday", "March", "20"], "answer": "March"},
-            {"label": 'strftime("%C")', "options": ["20", "03", "2026"], "answer": "20"}
+            {
+                "label": 'strftime("%A")',
+                "options": ["Monday", "March", "20"],
+                "answer": "Monday",
+            },
+            {
+                "label": 'strftime("%B")',
+                "options": ["Monday", "March", "20"],
+                "answer": "March",
+            },
+            {
+                "label": 'strftime("%C")',
+                "options": ["20", "03", "2026"],
+                "answer": "20",
+            }
         ],
         "answer": ["Monday", "March", "20"],
     },
     {
-        "id": 22,
-        "question": """What is the output of the following Python code?
+    "id": 22,
+    "question": """What is the output of the following Python code?
 
-from datetime import datetime
-d = datetime(2026, 3, 23)
-result = d.strftime("%A")
-print(result)""",
+    from datetime import datetime
+
+    d = datetime(2026, 3, 23)
+    result = d.strftime("%A")
+
+    print(result)""",
         "type": "mc",
-        "options": ["A. Monday", "B. 03", "C. March", "D. 26"],
+        "options": [
+            "A. Monday",
+            "B. 03",
+            "C. March",
+            "D. 26"
+        ],
         "answer": "A. Monday",
     },
     {
-        "id": 23,
-        "question": """What is the output of the following Python code?
+    "id": 23,
+    "question": """What is the output of the following Python code?
 
-name = "Alex"
-score = 85
-result = f"{name} scored {score}%"
-print(result)""",
+    name = "Alex"
+    score = 85
+
+    result = f"{name} scored {score}%"
+    print(result)""",
         "type": "mc",
-        "options": ["A. Alex scored 85%", "B. Alex scored score%", "C. name scored 85%", "D. Alex scored 85"],
+        "options": [
+            "A. Alex scored 85%",
+            "B. Alex scored score%",
+            "C. name scored 85%",
+            "D. Alex scored 85"
+        ],
         "answer": "A. Alex scored 85%",
     },
     {
-        "id": 24,
-        "question": "Complete the Python string formatting to display the number with two decimal places.",
-        "type": "dropdown_sim",
-        "code": """value = 3.14159
-formatted = f"{value:[DROPDOWN]}"
-print(formatted)""",
+    "id": 24,
+    "question": "Complete the Python string formatting to display the number with two decimal places.",
+    "type": "dropdown_sim",
+    "code": """value = 3.14159
+
+    formatted = f"{value:[DROPDOWN]}"
+    print(formatted)""",
         "dropdowns": [
             {
                 "label": "Format specifier",
@@ -696,514 +723,603 @@ def restore_auth_from_cookie():
         except Exception:
             pass
         return False
+
 # =================================================
-# FIRESTORE DATA LAYERS
+# DATA HELPERS
 # =================================================
+def get_student_profile(uid: str):
+    if not uid:
+        return None
+
+    snap = db().collection(STUDENT_PROFILES_COLLECTION).document(uid).get()
+    if not snap.exists:
+        return None
+
+    data = snap.to_dict() or {}
+    if not data.get("active", True):
+        return None
+
+    data["uid"] = snap.id
+    return data
+
+
 def load_student_profiles():
-    try:
-        docs = db().collection(STUDENT_PROFILES_COLLECTION).stream()
-        res = []
-        for d in docs:
-            v = d.to_dict()
-            v["id"] = d.id
-            res.append(v)
-        return sorted(res, key=lambda x: (x.get("period", ""), x.get("last_name", ""), x.get("first_name", "")))
-    except Exception as e:
-        st.error(f"Error fetching student profiles: {e}")
-        return []
+    docs = db().collection(STUDENT_PROFILES_COLLECTION).stream()
+    rows = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data["uid"] = doc.id
+        rows.append(data)
+    return rows
 
 
-def upsert_student_profile(student_id: str, last_name: str, first_name: str, period: str):
-    try:
-        doc_ref = db().collection(STUDENT_PROFILES_COLLECTION).document(student_id)
-        doc_ref.set({
-            "student_id": student_id,
-            "last_name": last_name,
-            "first_name": first_name,
-            "period": period,
-            "updated_at": now_utc(),
-        }, merge=True)
-        return True
-    except Exception as e:
-        st.error(f"Error writing profile record: {e}")
-        return False
+def create_student_account_and_profile(
+    email: str,
+    password: str,
+    first_name: str,
+    student_id: str,
+    period: str,
+    active: bool = True,
+):
+    get_firestore_client()
+
+    email = email.strip().lower()
+    first_name = first_name.strip()
+    student_id = str(student_id).strip()
+    period = period.strip()
+
+    if not email:
+        raise ValueError("Student email is required.")
+    if not password or len(password) < 6:
+        raise ValueError("Password must be at least 6 characters.")
+    if not first_name:
+        raise ValueError("First name is required.")
+    if not student_id.isdigit():
+        raise ValueError("Student ID must be numeric.")
+    if not period:
+        raise ValueError("Period is required.")
+
+    existing_profiles = db().collection(STUDENT_PROFILES_COLLECTION).where("student_id", "==", student_id).limit(1).stream()
+    if any(True for _ in existing_profiles):
+        raise ValueError(f"Student ID {student_id} already exists.")
+
+    existing_email_profiles = db().collection(STUDENT_PROFILES_COLLECTION).where("email", "==", email).limit(1).stream()
+    if any(True for _ in existing_email_profiles):
+        raise ValueError(f"Email {email} already exists in student profiles.")
+
+    user = firebase_auth.create_user(
+        email=email,
+        password=password,
+        display_name=first_name,
+    )
+    uid = user.uid
+
+    db().collection(STUDENT_PROFILES_COLLECTION).document(uid).set({
+        "uid": uid,
+        "email": email,
+        "first_name": first_name,
+        "student_id": student_id,
+        "period": period,
+        "display_name": f"{first_name}-{student_id}",
+        "active": bool(active),
+        "created_utc": now_utc(),
+    })
+
+    return {
+        "uid": uid,
+        "email": email,
+        "display_name": f"{first_name}-{student_id}",
+    }
 
 
-def load_all_exam_results():
-    try:
-        docs = db().collection(RESULTS_COLLECTION).stream()
-        res = []
-        for d in docs:
-            v = d.to_dict()
-            v["id"] = d.id
-            res.append(v)
-        return sorted(res, key=lambda x: x.get("submitted_at", ""), reverse=True)
-    except Exception as e:
-        st.error(f"Error reading class results: {e}")
-        return []
+def save_exam_result(student_profile: dict, score: int, total_questions: int, timed_out: bool):
+    if not student_profile:
+        raise ValueError("Missing student profile.")
+
+    percentage = round((score / total_questions) * 100, 2) if total_questions else 0.0
+
+    db().collection(RESULTS_COLLECTION).add({
+        "uid": student_profile.get("uid", ""),
+        "student_name": student_profile.get("first_name", ""),
+        "student_id": student_profile.get("student_id", ""),
+        "period": student_profile.get("period", ""),
+        "email": student_profile.get("email", ""),
+        "score": int(score),
+        "total_questions": int(total_questions),
+        "percentage": percentage,
+        "timed_out": bool(timed_out),
+        "submitted_utc": now_utc(),
+        "quiz_title": "Python Final Exam",
+    })
 
 
-def load_my_exam_results(auth_uid: str):
-    try:
-        docs = (
-            db()
-            .collection(RESULTS_COLLECTION)
-            .where("auth_uid", "==", auth_uid)
-            .stream()
-        )
-        res = []
-        for d in docs:
-            v = d.to_dict()
-            v["id"] = d.id
-            res.append(v)
-        return sorted(res, key=lambda x: x.get("submitted_at", ""), reverse=True)
-    except Exception:
-        return []
+def load_exam_results():
+    docs = (
+        db()
+        .collection(RESULTS_COLLECTION)
+        .order_by("submitted_utc", direction=firestore.Query.DESCENDING)
+        .stream()
+    )
+    rows = []
+    for doc in docs:
+        rows.append(doc.to_dict() or {})
+    return rows
 
 
-def load_exam_attempt(auth_uid: str):
-    try:
-        doc = db().collection(EXAM_ATTEMPTS_COLLECTION).document(auth_uid).get()
-        if doc.exists:
-            return doc.to_dict()
-    except Exception:
-        pass
-    return None
-
-
-def save_exam_attempt(auth_uid: str, attempt_data: dict):
-    try:
-        db().collection(EXAM_ATTEMPTS_COLLECTION).document(auth_uid).set(attempt_data)
-    except Exception as e:
-        st.error(f"Error persisting session branch to database: {e}")
-
-
-def clear_exam_attempt(auth_uid: str):
-    try:
-        db().collection(EXAM_ATTEMPTS_COLLECTION).document(auth_uid).delete()
-    except Exception:
-        pass
-
-
-def save_final_exam_result(auth_uid: str, student_profile: dict, score: int, total: int, timed_out=False):
-    try:
-        percentage = round((score / total) * 100, 2) if total > 0 else 0.0
-        doc_id = f"{auth_uid}_{int(time.time())}"
-        payload = {
-            "auth_uid": auth_uid,
-            "student_id": student_profile.get("student_id", "UNKNOWN"),
-            "first_name": student_profile.get("first_name", ""),
-            "last_name": student_profile.get("last_name", ""),
-            "period": student_profile.get("period", ""),
-            "score": score,
-            "total_questions": total,
-            "percentage": percentage,
-            "timed_out": timed_out,
-            "submitted_at": now_utc(),
-        }
-        db().collection(RESULTS_COLLECTION).document(doc_id).set(payload)
-        return True
-    except Exception as e:
-        st.error(f"Critical submission failure: {e}")
-        return False
-
-
-def get_student_profile_by_email(email: str):
-    try:
-        clean_email = email.strip().lower()
-        if "@" not in clean_email:
-            return None
-        parts = clean_email.split("@")[0].split(".")
-        if len(parts) >= 2:
-            f_candidate = parts[0]
-            l_candidate = parts[1]
-        else:
-            f_candidate = parts[0]
-            l_candidate = ""
-
-        docs = db().collection(STUDENT_PROFILES_COLLECTION).stream()
-        for d in docs:
-            v = d.to_dict()
-            sid = str(v.get("student_id", "")).strip()
-            fname = str(v.get("first_name", "")).strip().lower()
-            lname = str(v.get("last_name", "")).strip().lower()
-
-            if sid and clean_email.startswith(sid.lower()):
-                return v
-            if fname and lname and (fname in clean_email) and (lname in clean_email):
-                return v
-            if fname and f_candidate == fname:
-                return v
-    except Exception:
-        pass
-    return None
+def load_my_exam_results(uid: str):
+    docs = db().collection(RESULTS_COLLECTION).where("uid", "==", uid).stream()
+    rows = [doc.to_dict() or {} for doc in docs]
+    rows.sort(key=lambda x: x.get("submitted_utc", ""), reverse=True)
+    return rows
 
 # =================================================
-# APPLICATION STATE LIFECYCLE
+# ATTEMPT PERSISTENCE
 # =================================================
-def init_session_states():
-    if "auth_verified" not in st.session_state:
-        st.session_state.auth_verified = False
-    if "auth_user" not in st.session_state:
-        st.session_state.auth_user = None
-    if "is_teacher" not in st.session_state:
-        st.session_state.is_teacher = False
-    if "student_profile" not in st.session_state:
-        st.session_state.student_profile = None
-
-    if "exam_started" not in st.session_state:
-        st.session_state.exam_started = False
-    if "exam_finished" not in st.session_state:
-        st.session_state.exam_finished = False
-    if "timed_out" not in st.session_state:
-        st.session_state.timed_out = False
-    if "start_time_epoch" not in st.session_state:
-        st.session_state.start_time_epoch = 0.0
-    if "current_question_index" not in st.session_state:
-        st.session_state.current_question_index = 0
-    if "score" not in st.session_state:
-        st.session_state.score = 0
-    if "answers" not in st.session_state:
-        st.session_state.answers = {}
-    if "feedback" not in st.session_state:
-        st.session_state.feedback = None
-    if "warning_shown" not in st.session_state:
-        st.session_state.warning_shown = False
+def attempt_ref(uid: str):
+    return db().collection(EXAM_ATTEMPTS_COLLECTION).document(uid)
 
 
+def load_exam_attempt(uid: str):
+    snap = attempt_ref(uid).get()
+    if not snap.exists:
+        return None
+    data = snap.to_dict() or {}
+    data["uid"] = snap.id
+    return data
+
+
+def save_exam_attempt(uid: str, payload: dict):
+    attempt_ref(uid).set(payload, merge=True)
+
+
+def clear_exam_attempt(uid: str):
+    try:
+        attempt_ref(uid).delete()
+    except Exception:
+        pass
+
+# =================================================
+# SESSION STATE
+# =================================================
 def reset_exam_state():
     st.session_state.exam_started = False
     st.session_state.exam_finished = False
-    st.session_state.timed_out = False
-    st.session_state.start_time_epoch = 0.0
+    st.session_state.started_at = None
+    st.session_state.current_question_index = 0
+    st.session_state.score = 0
+    st.session_state.question_order = []
+    st.session_state.answers = {}
+    st.session_state.feedback = None
+    st.session_state.saved_result = False
+    st.session_state.warning_shown = False
+
+
+def sign_out():
+    st.session_state.auth_verified = False
+    st.session_state.auth_user = None
+    st.session_state.is_teacher = False
+    st.session_state.student_profile = None
+    reset_exam_state()
+
+    if cookies is not None:
+        try:
+            cookies["firebase_session"] = ""
+            cookies.save()
+        except Exception:
+            pass
+
+
+st.session_state.setdefault("auth_verified", False)
+st.session_state.setdefault("auth_user", None)
+st.session_state.setdefault("is_teacher", False)
+st.session_state.setdefault("student_profile", None)
+
+st.session_state.setdefault("exam_started", False)
+st.session_state.setdefault("exam_finished", False)
+st.session_state.setdefault("started_at", None)
+st.session_state.setdefault("current_question_index", 0)
+st.session_state.setdefault("score", 0)
+st.session_state.setdefault("question_order", [])
+st.session_state.setdefault("answers", {})
+st.session_state.setdefault("feedback", None)
+st.session_state.setdefault("saved_result", False)
+st.session_state.setdefault("warning_shown", False)
+
+if not st.session_state.auth_verified:
+    restore_auth_from_cookie()
+
+# =================================================
+# AUTH SIDEBAR
+# =================================================
+with st.sidebar:
+    st.header("Firebase Sign In")
+
+    if cookies is None:
+        st.caption("Persistent cookies unavailable. Login will work for the current session only.")
+
+    if not st.session_state.auth_verified:
+        with st.form("firebase_login_form"):
+            login_email = st.text_input("Email")
+            login_password = st.text_input("Password", type="password")
+            login_submit = st.form_submit_button("Sign In")
+
+        if login_submit:
+            try:
+                sign_in_result = firebase_sign_in_email_password(
+                    login_email.strip(),
+                    login_password
+                )
+                decoded = verify_firebase_id_token(sign_in_result["id_token"])
+
+                email = str(decoded.get("email", "")).strip().lower()
+                teacher_emails = get_teacher_emails()
+
+                st.session_state.auth_verified = True
+                st.session_state.auth_user = {
+                    "uid": decoded.get("uid", ""),
+                    "email": email,
+                    "email_verified": bool(decoded.get("email_verified", False)),
+                    "is_teacher": email in teacher_emails,
+                }
+                st.session_state.is_teacher = email in teacher_emails
+
+                persist_auth_cookie(sign_in_result["id_token"])
+                st.success("Signed in successfully.")
+                st.rerun()
+            except Exception as e:
+                st.error(str(e))
+
+        st.stop()
+
+    auth_user = st.session_state.auth_user or {}
+    st.success(f"Signed in as: {auth_user.get('email', 'unknown')}")
+    st.caption("Teacher" if auth_user.get("is_teacher") else "Student")
+
+    if st.button("Sign Out"):
+        sign_out()
+        st.rerun()
+
+# =================================================
+# LOAD STUDENT PROFILE / RESTORE ATTEMPT
+# =================================================
+auth_user = st.session_state.auth_user or {}
+auth_uid = str(auth_user.get("uid", "")).strip()
+is_teacher_user = bool(auth_user.get("is_teacher", False))
+
+if not is_teacher_user:
+    profile = get_student_profile(auth_uid)
+    if not profile:
+        st.error("No active student profile found for this account.")
+        st.stop()
+    st.session_state.student_profile = profile
+
+    # restore persisted attempt on login/refresh
+    existing_attempt = load_exam_attempt(auth_uid)
+    if existing_attempt:
+        st.session_state.exam_started = not bool(existing_attempt.get("finished", False))
+        st.session_state.exam_finished = bool(existing_attempt.get("finished", False))
+        st.session_state.started_at = existing_attempt.get("started_at_epoch")
+        st.session_state.current_question_index = int(existing_attempt.get("current_question_index", 0))
+        st.session_state.score = int(existing_attempt.get("score", 0))
+        st.session_state.question_order = existing_attempt.get("question_order", [])
+        st.session_state.answers = existing_attempt.get("answers", {}) or {}
+        st.session_state.saved_result = bool(existing_attempt.get("saved_result", False))
+        st.session_state.warning_shown = bool(existing_attempt.get("warning_shown", False))
+        st.session_state.feedback = None
+
+# =================================================
+# HELPERS
+# =================================================
+def start_exam():
+    order = list(range(len(QUIZ_QUESTIONS)))
+    random.shuffle(order)
+    st.session_state.question_order = order
     st.session_state.current_question_index = 0
     st.session_state.score = 0
     st.session_state.answers = {}
     st.session_state.feedback = None
+    st.session_state.exam_started = True
+    st.session_state.exam_finished = False
+    st.session_state.saved_result = False
     st.session_state.warning_shown = False
+    st.session_state.started_at = time.time()
+
+    save_exam_attempt(auth_uid, {
+        "uid": auth_uid,
+        "started_utc": now_utc(),
+        "started_at_epoch": st.session_state.started_at,
+        "question_order": st.session_state.question_order,
+        "current_question_index": 0,
+        "score": 0,
+        "answers": {},
+        "finished": False,
+        "saved_result": False,
+        "warning_shown": False,
+    })
 
 
-def pull_and_sync_session_attempt(auth_uid: str):
-    attempt = load_exam_attempt(auth_uid)
-    if attempt:
-        st.session_state.exam_started = attempt.get("exam_started", False)
-        st.session_state.exam_finished = attempt.get("exam_finished", False)
-        st.session_state.timed_out = attempt.get("timed_out", False)
-        st.session_state.start_time_epoch = float(attempt.get("start_time_epoch", 0.0))
-        st.session_state.current_question_index = int(attempt.get("current_question_index", 0))
-        st.session_state.score = int(attempt.get("score", 0))
-        st.session_state.answers = attempt.get("answers", {})
-        st.session_state.feedback = attempt.get("feedback", None)
-        st.session_state.warning_shown = attempt.get("warning_shown", False)
-        return True
-    return False
+def finish_exam(timed_out: bool = False):
+    st.session_state.exam_started = False
+    st.session_state.exam_finished = True
 
+    if not st.session_state.saved_result and st.session_state.student_profile:
+        save_exam_result(
+            st.session_state.student_profile,
+            st.session_state.score,
+            len(QUIZ_QUESTIONS),
+            timed_out,
+        )
+        st.session_state.saved_result = True
 
-def push_session_attempt_to_cloud(auth_uid: str):
-    if not st.session_state.exam_started:
-        return
-    payload = {
-        "exam_started": st.session_state.exam_started,
-        "exam_finished": st.session_state.exam_finished,
-        "timed_out": st.session_state.timed_out,
-        "start_time_epoch": st.session_state.start_time_epoch,
-        "current_question_index": st.session_state.current_question_index,
+    save_exam_attempt(auth_uid, {
+        "finished": True,
+        "saved_result": True,
+        "timed_out": bool(timed_out),
         "score": st.session_state.score,
+        "current_question_index": st.session_state.current_question_index,
         "answers": st.session_state.answers,
-        "feedback": st.session_state.feedback,
         "warning_shown": st.session_state.warning_shown,
-        "last_updated_at": now_utc(),
-    }
-    save_exam_attempt(auth_uid, payload)
+    })
 
 
 def get_remaining_seconds():
-    if not st.session_state.exam_started or st.session_state.start_time_epoch == 0:
+    if not st.session_state.started_at:
         return QUIZ_DURATION_MINUTES * 60
-    elapsed = time.time() - st.session_state.start_time_epoch
-    total_allowed = QUIZ_DURATION_MINUTES * 60
-    return max(0.0, total_allowed - elapsed)
+    elapsed = int(time.time() - float(st.session_state.started_at))
+    remaining = (QUIZ_DURATION_MINUTES * 60) - elapsed
+    return max(0, remaining)
 
-# =================================================
-# CLIENT ASYNC TIMER BRIDGE
-# =================================================
+
 def render_js_timer():
-    rem_sec = int(get_remaining_seconds())
-    if rem_sec <= 0:
-        return
+    remaining = get_remaining_seconds()
 
-    html_code = f"""
-    <div id="timer-display" style="font-size: 1.5em; font-weight: bold; color: #dc3545; text-align: right; font-family: sans-serif;">
-        00:00
-    </div>
+    if remaining <= WARNING_MINUTES * 60 and not st.session_state.warning_shown and st.session_state.exam_started:
+        st.session_state.warning_shown = True
+        save_exam_attempt(auth_uid, {"warning_shown": True})
+
+    html = f"""
+    <div id="timer-root" style="
+        font-size: 1.5em;
+        font-weight: bold;
+        color: #dc3545;
+        text-align: right;
+    ">00:00</div>
+
     <script>
-        var remainingSeconds = {rem_sec};
-        var displayEl = document.getElementById("timer-display");
+    let remaining = {remaining};
+    const root = document.getElementById("timer-root");
 
-        function updateDisplay() {{
-            if (remainingSeconds <= 0) {{
-                displayEl.innerHTML = "00:00";
-                clearInterval(intervalId);
-                // Fire window location reload to break streamlit context frame
-                setTimeout(function() {{ window.parent.location.reload(); }}, 500);
-                return;
-            }}
-            var mins = Math.floor(remainingSeconds / 60);
-            var secs = remainingSeconds % 60;
-            var formatMins = mins < 10 ? "0" + mins : mins;
-            var formatSecs = secs < 10 ? "0" + secs : secs;
-            displayEl.innerHTML = formatMins + ":" + formatSecs;
-            remainingSeconds--;
+    function formatTime(total) {{
+        const minutes = Math.floor(total / 60);
+        const seconds = total % 60;
+        return String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0");
+    }}
+
+    function tick() {{
+        root.textContent = formatTime(Math.max(remaining, 0));
+        if (remaining > 0) {{
+            remaining -= 1;
+            setTimeout(tick, 1000);
+        }} else {{
+            root.textContent = "00:00";
         }}
+    }}
 
-        updateDisplay();
-        var intervalId = setInterval(updateDisplay, 1000);
+    tick();
     </script>
     """
-    components.html(html_code, height=45)
+    components.html(html, height=40)
 
-# =================================================
-# ENGINE LOGIC CORE
-# =================================================
+
 def current_question():
     idx = st.session_state.current_question_index
-    if 0 <= idx < len(QUIZ_QUESTIONS):
-        return QUIZ_QUESTIONS[idx]
-    return None
+    q_index = st.session_state.question_order[idx]
+    return QUIZ_QUESTIONS[q_index]
 
 
-def start_exam():
-    st.session_state.exam_started = True
-    st.session_state.exam_finished = False
-    st.session_state.timed_out = False
-    st.session_state.start_time_epoch = time.time()
-    st.session_state.current_question_index = 0
-    st.session_state.score = 0
-    st.session_state.answers = {}
-    st.session_state.feedback = None
-    st.session_state.warning_shown = False
-    push_session_attempt_to_cloud(st.session_state.auth_user["uid"])
+def check_current_answer(question):
+    qid = question["id"]
 
+    if question["type"] == "mc":
+        user_answer = st.session_state.get(f"q_{qid}_radio")
+        if not user_answer:
+            return None, "Please select an answer."
+        is_correct = user_answer == question["answer"]
+        return is_correct, user_answer
 
-def finish_exam(timed_out=False):
-    st.session_state.exam_started = False
-    st.session_state.exam_finished = True
-    st.session_state.timed_out = timed_out
-    st.session_state.feedback = None
+    if question["type"] == "mc_multi":
+        selected = []
+        for i, option in enumerate(question["options"]):
+            if st.session_state.get(f"q_{qid}_check_{i}", False):
+                selected.append(option)
 
-    uid = st.session_state.auth_user["uid"]
-    prof = st.session_state.student_profile or {"first_name": "Unknown", "last_name": "Student"}
+        if not selected:
+            return None, "Please select at least one answer."
 
-    save_final_exam_result(
-        auth_uid=uid,
-        student_profile=prof,
-        score=st.session_state.score,
-        total=len(QUIZ_QUESTIONS),
-        timed_out=timed_out,
-    )
-    clear_exam_attempt(uid)
+        correct_answers = question["answer"]
+        is_correct = len(selected) == len(correct_answers) and all(ans in selected for ans in correct_answers)
+        return is_correct, selected
+
+    if question["type"] == "sequencing":
+        user_order = []
+        used = set()
+        for i in range(len(question["options"])):
+            value = st.session_state.get(f"q_{qid}_order_{i}")
+            if not value:
+                return None, "Please complete all order positions."
+            user_order.append(value)
+            used.add(value)
+
+        if len(used) != len(question["options"]):
+            return None, "Each item can only be used once."
+
+        is_correct = user_order == question["answer"]
+        return is_correct, user_order
+
+    if question["type"] == "dropdown_sim":
+        selections = []
+        for i, dd in enumerate(question["dropdowns"]):
+            value = st.session_state.get(f"q_{qid}_dd_{i}")
+            if not value:
+                return None, "Please complete all dropdowns."
+            selections.append(value)
+
+        is_correct = selections == question["answer"]
+        return is_correct, selections
+
+    return None, "Unsupported question type."
 
 
 def submit_answer():
-    q = current_question()
-    if not q:
+    question = current_question()
+    result, payload = check_current_answer(question)
+
+    if result is None:
+        st.session_state.feedback = {
+            "type": "missing",
+            "message": payload,
+        }
         return
 
-    qid = str(q["id"])
-    user_ans = None
-    is_correct = False
-
-    if q["type"] == "mc":
-        user_ans = st.session_state.get(f"q_{q['id']}_radio")
-        if not user_ans:
-            st.session_state.feedback = {"type": "missing", "message": "Please select an answer before submitting."}
-            return
-        is_correct = (user_ans == q["answer"])
-
-    elif q["type"] == "mc_multi":
-        selected = []
-        for i, opt in enumerate(q["options"]):
-            if st.session_state.get(f"q_{q['id']}_check_{i}"):
-                selected.append(opt)
-        if len(selected) != 2:
-            st.session_state.feedback = {"type": "missing", "message": "Please select exactly two answers before submitting."}
-            return
-        user_ans = selected
-        is_correct = (set(selected) == set(q["answer"]))
-
-    elif q["type"] == "sequencing":
-        ans_list = []
-        missing = False
-        for i in range(len(q["options"])):
-            val = st.session_state.get(f"q_{q['id']}_order_{i}", "")
-            if not val:
-                missing = True
-            ans_list.append(val)
-        if missing:
-            st.session_state.feedback = {"type": "missing", "message": "Please assign a item to every sequencing slot."}
-            return
-        user_ans = ans_list
-        is_correct = (ans_list == q["answer"])
-
-    elif q["type"] == "dropdown_sim":
-        ans_list = []
-        missing = False
-        for i in range(len(q["dropdowns"])):
-            val = st.session_state.get(f"q_{q['id']}_dd_{i}", "")
-            if not val:
-                missing = True
-            ans_list.append(val)
-        if missing:
-            st.session_state.feedback = {"type": "missing", "message": "Please select an option for all code matrix fields."}
-            return
-        user_ans = ans_list
-        is_correct = (ans_list == q["answer"])
-
-    if is_correct:
+    if result:
         st.session_state.score += 1
-        st.session_state.feedback = {"type": "correct", "message": "🎯 Correct answer saved!"}
+        st.session_state.feedback = {
+            "type": "correct",
+            "message": "✅ Correct! Well done.",
+        }
     else:
-        st.session_state.feedback = {"type": "incorrect", "message": "❌ Answer recorded."}
+        if question["type"] == "mc":
+            msg = f"❌ Incorrect. The correct answer was: {question['answer']}"
+        else:
+            msg = f"❌ Incorrect. The correct answer(s) were: {question['answer']}"
+        st.session_state.feedback = {
+            "type": "incorrect",
+            "message": msg,
+        }
 
-    st.session_state.answers[qid] = user_ans
-    push_session_attempt_to_cloud(st.session_state.auth_user["uid"])
+    st.session_state.answers[str(question["id"])] = {
+        "submitted": True,
+        "correct": bool(result),
+    }
+
+    save_exam_attempt(auth_uid, {
+        "score": st.session_state.score,
+        "answers": st.session_state.answers,
+        "current_question_index": st.session_state.current_question_index,
+        "warning_shown": st.session_state.warning_shown,
+        "finished": False,
+    })
 
 
 def next_question():
-    st.session_state.feedback = None
     if st.session_state.current_question_index >= len(QUIZ_QUESTIONS) - 1:
         finish_exam(timed_out=False)
     else:
         st.session_state.current_question_index += 1
-        push_session_attempt_to_cloud(st.session_state.auth_user["uid"])
+        st.session_state.feedback = None
+        save_exam_attempt(auth_uid, {
+            "current_question_index": st.session_state.current_question_index,
+            "score": st.session_state.score,
+            "answers": st.session_state.answers,
+            "warning_shown": st.session_state.warning_shown,
+            "finished": False,
+        })
 
 # =================================================
-# MAIN RENDER ENTRYWAY
+# MAIN LAYOUT
 # =================================================
-init_session_states()
-restore_auth_from_cookie()
+st.markdown('<div class="quiz-shell">', unsafe_allow_html=True)
 
-st.title("🐍 Advanced Programming Portal")
+if is_teacher_user:
+    left_col, right_col = st.columns([3, 1])
+    with left_col:
+        st.markdown('<div class="header-title">Python Final Exam - Teacher Dashboard</div>', unsafe_allow_html=True)
+    with right_col:
+        st.markdown('<div class="timer-box">Teacher</div>', unsafe_allow_html=True)
 
-if not st.session_state.auth_verified:
-    st.subheader("Final Exam Portal Login")
-    tab1, tab2 = st.tabs(["Sign In", "Create Student Profile"])
+    st.markdown(
+        '<div class="status-bar">Teacher access enabled. Create student accounts and review final exam scores.</div>',
+        unsafe_allow_html=True
+    )
 
-    with tab1:
-        with st.form("login_form"):
-            email_input = st.text_input("School Email").strip()
-            pass_input = st.text_input("Access Password", type="password")
-            btn = st.form_submit_button("Authenticate Access", use_container_width=True)
+    st.markdown('<div class="teacher-box">', unsafe_allow_html=True)
+    st.subheader("Create Student Login")
 
-            if btn:
-                if not email_input or not pass_input:
-                    st.error("Please provide both email and password credentials.")
-                else:
-                    try:
-                        res = firebase_sign_in_email_password(email_input, pass_input)
-                        persist_auth_cookie(res["id_token"])
-                        st.success("Authorization verified! Syncing environment...")
-                        st.rerun()
-                    except Exception as ex:
-                        st.error(f"Login Rejected: {ex}")
+    with st.form("create_student_form", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            new_student_email = st.text_input("Student Email")
+            new_student_password = st.text_input("Temporary Password", type="password")
+            new_first_name = st.text_input("First Name")
+        with c2:
+            new_student_id = st.text_input("Student ID")
+            new_period = st.selectbox("Class / Period", PERIOD_OPTIONS)
+            new_active = st.checkbox("Active", value=True)
 
-    with tab2:
-        st.markdown("If you do not have an active database profile ID, create one here.")
-        with st.form("register_profile_form"):
-            reg_id = st.text_input("Student ID Number (e.g., 100123)").strip()
-            reg_first = st.text_input("First Name").strip()
-            reg_last = st.text_input("Last Name").strip()
-            reg_period = st.selectbox("Class Period Assignment", PERIOD_OPTIONS)
-            reg_btn = st.form_submit_button("Register New Student Profile", use_container_width=True)
+        create_submit = st.form_submit_button("Create Student Account")
 
-            if reg_btn:
-                if not reg_id or not reg_first or not reg_last:
-                    st.error("All identification form values are explicitly mandatory.")
-                else:
-                    if upsert_student_profile(reg_id, reg_last, reg_first, reg_period):
-                        st.success(f"Profile saved! Student ID '{reg_id}' is authorized. Switch tabs to login.")
-    st.stop()
+    if create_submit:
+        try:
+            create_student_account_and_profile(
+                email=new_student_email,
+                password=new_student_password,
+                first_name=new_first_name,
+                student_id=new_student_id,
+                period=new_period,
+                active=new_active,
+            )
+            st.success("Student account created successfully.")
+        except Exception as e:
+            st.error(str(e))
 
-# =================================================
-# AUTHENTICATED SYSTEM DASHBOARDS
-# =================================================
-auth_user = st.session_state.auth_user
-auth_uid = auth_user["uid"]
-user_email = auth_user["email"]
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# Resolve Student Profile Context Info if user is not teacher
-if not st.session_state.is_teacher and st.session_state.student_profile is None:
-    st.session_state.student_profile = get_student_profile_by_email(user_email) or {
-        "student_id": "STU-" + auth_uid[:6].upper(),
-        "first_name": user_email.split("@")[0],
-        "last_name": "Profile",
-        "period": "Unassigned"
-    }
-
-# Read state syncs from cloud database session tables once
-if st.session_state.exam_started and not st.session_state.answers:
-    pull_and_sync_session_attempt(auth_uid)
-
-# Check legacy background time boundaries
-legacy_timeout_check = False
-if st.session_state.exam_started and get_remaining_seconds() <= 0:
-    legacy_timeout_check = True
-
-# Top Action Toolbar
-col_user, col_logout = st.columns([3, 1])
-with col_user:
-    st.markdown(f"**Account Active:** `{user_email}`")
-with col_logout:
-    if st.button("Log Out System", use_container_width=True):
-        if cookies is not None:
-            cookies["firebase_session"] = ""
-            cookies.save()
-        st.session_state.auth_verified = False
-        st.session_state.auth_user = None
-        reset_exam_state()
-        st.rerun()
-
-# --- TEACHER VIEW ---
-if st.session_state.is_teacher:
-    st.markdown("---")
-    st.subheader("🛠️ Administrative Instructor Dashboard")
-    t_tabs = st.tabs(["Database Records Grid", "Active Exam Logs", "Roster Management Form"])
-
-    with t_tabs[0]:
-        st.markdown("### Final Evaluated Submissions Table")
-        all_results = load_all_exam_results()
-        if all_results:
-            st.dataframe(all_results, use_container_width=True)
-        else:
-            st.info("No completed final exams stored inside collection yet.")
-
-    with t_tabs[1]:
-        st.markdown("### Profile Verification Grid")
+    st.markdown('<div class="teacher-box">', unsafe_allow_html=True)
+    st.subheader("Student Profiles")
+    try:
         profiles = load_student_profiles()
         if profiles:
-            st.dataframe(profiles, use_container_width=True)
+            rows = []
+            for p in sorted(profiles, key=lambda x: (str(x.get("period", "")), str(x.get("first_name", "")))):
+                rows.append({
+                    "First Name": p.get("first_name", ""),
+                    "Student ID": p.get("student_id", ""),
+                    "Period": p.get("period", ""),
+                    "Email": p.get("email", ""),
+                    "Active": bool(p.get("active", True)),
+                })
+            st.dataframe(rows, use_container_width=True, height=260)
         else:
-            st.info("No valid profile nodes stored inside database instance collections.")
+            st.info("No student profiles found.")
+    except Exception as e:
+        st.error(str(e))
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    with t_tabs[2]:
-        st.markdown("### Manual Student Registry Updates")
-        with st.form("manual_teacher_upsert"):
-            m_id = st.text_input("Target Student ID").strip()
-            m_first = st.text_input("First Name").strip()
-            m_last = st.text_input("Last Name").strip()
-            m_period = st.selectbox("Assigned Period Loop", PERIOD_OPTIONS)
-            m_btn = st.form_submit_button("Commit Profile Record", use_container_width=True)
-            if m_btn:
-                if m_id and m_first and m_last:
-                    if upsert_student_profile(m_id, m_last, m_first, m_period):
-                        st.success(f"Profile {m_id} processed cleanly.")
-                        st.rerun()
-                else:
-                    st.error("Please fill all configuration elements.")
+    st.markdown('<div class="teacher-box">', unsafe_allow_html=True)
+    st.subheader("Saved Final Exam Scores")
+    try:
+        results = load_exam_results()
+        if results:
+            rows = []
+            for r in results:
+                rows.append({
+                    "Student Name": r.get("student_name", ""),
+                    "Student ID": r.get("student_id", ""),
+                    "Period": r.get("period", ""),
+                    "Score": r.get("score", 0),
+                    "Total": r.get("total_questions", 0),
+                    "Percentage": r.get("percentage", 0),
+                    "Submitted UTC": r.get("submitted_utc", ""),
+                    "Timed Out": r.get("timed_out", False),
+                })
+            st.dataframe(rows, use_container_width=True, height=320)
+        else:
+            st.info("No exam results saved yet.")
+    except Exception as e:
+        st.error(str(e))
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# --- STUDENT VIEW ---
 else:
-    st.markdown('<div class="quiz-shell">', unsafe_allow_html=True)
     student_profile = st.session_state.student_profile
 
     header_left, header_right = st.columns([3, 1])
@@ -1213,14 +1329,16 @@ else:
         if st.session_state.exam_started:
             render_js_timer()
         else:
-            st.markdown(f'<div class="timer-box">{QUIZ_DURATION_MINUTES:02d}:00</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="timer-box">{QUIZ_DURATION_MINUTES:02d}:00</div>',
+                unsafe_allow_html=True,
+            )
 
-    # 1. CRITICAL PRIORITIZED TIMEOUT HANDLING LAYER
-    if legacy_timeout_check or (st.session_state.exam_started and get_remaining_seconds() <= 0):
+    # force timeout check on every rerun
+    if st.session_state.exam_started and get_remaining_seconds() <= 0:
         finish_exam(timed_out=True)
-        st.rerun()  # Instantly breaks loop processing and re-renders direct to section #4 below
+        st.rerun()
 
-    # 2. INTRODUCTORY INSTRUCTIONS BAR LAYER
     if not st.session_state.exam_started and not st.session_state.exam_finished:
         st.markdown(
             f'<div class="status-bar">{student_profile.get("first_name", "")} | ID: {student_profile.get("student_id", "")} | {student_profile.get("period", "")}</div>',
@@ -1242,7 +1360,7 @@ else:
         st.markdown('<div class="question-title">Final Exam Instructions</div>', unsafe_allow_html=True)
         st.write("You will answer one question at a time.")
         st.write(f"You have **{QUIZ_DURATION_MINUTES} minutes** to complete the exam.")
-        st.write("If you refresh or close the browser, the timer keeps running in the background.")
+        st.write("If you refresh or close the browser, the timer keeps running.")
         st.write("Your score will be saved automatically when you finish or when time runs out.")
         st.write("You need to score 82% or higher to pass the exam.")
         st.error("⚠️ FINAL EXAM WARNING: Read each question carefully. After you submit an answer, you cannot go back and change it.")
@@ -1252,18 +1370,12 @@ else:
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # 3. ACTIVE EVALUATION INTERACTIVE LAYER
     elif st.session_state.exam_started and not st.session_state.exam_finished:
-        # Check warning time boundary threshold
-        if not st.session_state.warning_shown and get_remaining_seconds() <= (WARNING_MINUTES * 60):
-            st.session_state.warning_shown = True
-            push_session_attempt_to_cloud(auth_uid)
-
         if st.session_state.warning_shown:
-            st.warning(f"⏱️ Warning: Only {WARNING_MINUTES} minutes remain in your exam window.")
+            st.warning("⏱️ Only 5 minutes remain in the exam.")
 
         st.markdown(
-            f'<div class="status-bar">Question {st.session_state.current_question_index + 1} of {len(QUIZ_QUESTIONS)} | Current Score: {st.session_state.score}</div>',
+            f'<div class="status-bar">Question {st.session_state.current_question_index + 1} of {len(QUIZ_QUESTIONS)} | Score: {st.session_state.score}</div>',
             unsafe_allow_html=True,
         )
 
@@ -1337,41 +1449,35 @@ else:
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # 4. COMPLETED OR TIMED OUT VIEW RESULTS DISPLAY
     elif st.session_state.exam_finished:
         percentage = round((st.session_state.score / len(QUIZ_QUESTIONS)) * 100, 2) if QUIZ_QUESTIONS else 0.0
 
         if percentage == 100:
-            message = "🎉 Perfect score! Masterful job!"
-        elif percentage >= 82:
-            message = "👍 Excellent work! You have passed the certification standard threshold!"
+            message = "🎉 Perfect score!"
+        elif percentage >= 70:
+            message = "👍 Great job!"
         else:
-            message = "📚 Evaluation complete. You did not meet the passing standard threshold."
+            message = "📚 Exam complete."
 
         st.markdown('<div class="result-box">', unsafe_allow_html=True)
-        st.markdown("<h2>Exam Evaluation Complete</h2>", unsafe_allow_html=True)
-        
-        # Display feedback if they hit a timeout flag
-        if st.session_state.get("timed_out"): 
-            st.error("⏰ Time ran out! Your active session session has closed and final states were compiled.")
-
-        st.write(f"Your calculated score: **{st.session_state.score}** / **{len(QUIZ_QUESTIONS)}**")
-        st.write(f"Final Percentage: **{percentage}%**")
-        st.markdown(f"### {message}")
+        st.markdown("<h2>Exam Finished!</h2>", unsafe_allow_html=True)
+        st.write(f"Your final score is: **{st.session_state.score}** out of **{len(QUIZ_QUESTIONS)}**.")
+        st.write(f"Percentage: **{percentage}%**")
+        st.write(message)
 
         try:
             my_results = load_my_exam_results(auth_uid)
             if my_results:
                 latest = my_results[0]
-                st.write(f"Cloud verified log score: **{latest.get('score', 0)} / {latest.get('total_questions', 0)}**")
+                st.write(f"Saved score record: **{latest.get('score', 0)} / {latest.get('total_questions', 0)}**")
         except Exception:
             pass
 
-        if st.button("Start New Exam Attempt", use_container_width=True):
+        if st.button("Start New Exam", use_container_width=True):
             clear_exam_attempt(auth_uid)
             reset_exam_state()
             st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("</div>", unsafe_allow_html=True)    
+st.markdown("</div>", unsafe_allow_html=True)
