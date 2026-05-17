@@ -375,10 +375,10 @@ print(result)""",
         "id": 23,
         "question": """What is the output of the following Python code?
 
-name = "Alex"
-score = 85
-result = f"{name} scored {score}%"
-print(result)""",
+<br>&nbsp;&nbsp;&nbsp;&nbsp;name = "Alex"
+<br>&nbsp;&nbsp;&nbsp;&nbsp;score = 85
+<br>&nbsp;&nbsp;&nbsp;&nbsp;result = f"{name} scored {score}%"
+<br>&nbsp;&nbsp;&nbsp;&nbsp;print(result)""",
         "type": "mc",
         "options": ["A. Alex scored 85%", "B. Alex scored score%", "C. name scored 85%", "D. Alex scored 85"],
         "answer": "A. Alex scored 85%",
