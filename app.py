@@ -312,7 +312,7 @@ else:
     },
     {
         "id": 18,
-        "character": "Which character left-aligns formatted output in a field?",
+        "question": "Which character left-aligns formatted output in a field?",
         "type": "mc",
         "options": [
             "^ (The Caret)",
