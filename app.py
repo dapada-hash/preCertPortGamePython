@@ -1068,7 +1068,7 @@ else:
         st.write("You will answer one question at a time.")
         st.write(f"You have **{QUIZ_DURATION_MINUTES} minutes** to complete the exam.")
         st.write("If you refresh or close the browser, the timer keeps running in the background.")
-        st.write("Your score will be saved automatically when you finish or when time runs out.")
+        st.write("Your score will be saved automatically when you finish each question.")
         st.write("You need to score 84% or higher to pass the exam.")
         st.write("After you submit an answer, you will receive immediate feedback and your answer will be locked in for that question.")
         st.write("If you leave a question unanswered and proceed, it will be marked as incorrect.")
