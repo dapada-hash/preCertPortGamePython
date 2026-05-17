@@ -184,8 +184,8 @@ if __name__ == '__main__':
         "question": """Given the list My_list containing all lowercase letters, what is the correct output sequence for new_slice_3_to_6 followed by new_slice_to_6?
 
 My_list = ['a', 'b', 'c', 'd', 'e', 'f', 'g', ... 'z']
-new_slice_3_to_6 = My_list[3:6]<br>&nbsp;&nbsp;&nbsp;&nbsp;
-new_slice_to_6 = My_list[:6]""",
+new_slice_3_to_6 = My_list[3:6]
+<br>&nbsp;&nbsp;&nbsp;&nbsp;new_slice_to_6 = My_list[:6]""",
         "type": "mc",
         "options": [
             "['c', 'd', 'e'] and ['a', 'b', 'c', 'd', 'e']",
