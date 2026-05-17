@@ -312,7 +312,7 @@ else:
     },
     {
         "id": 18,
-        "question": "Which character left-aligns formatted output in a field?",  # <-- KEY TYPO FIXED HERE
+        "question": "Which character left-aligns formatted output in a field?",
         "type": "mc",
         "options": [
             "^ (The Caret)",
@@ -870,6 +870,16 @@ def init_session_states():
     if "warning_shown" not in st.session_state:
         st.session_state.warning_shown = False
 
+    # CRITICAL CLOUD VERIFICATION LAYER
+    # If the browser drops state on a page reload, sync instantly from Firestore records
+    if st.session_state.auth_verified and st.session_state.auth_user and not st.session_state.is_teacher:
+        uid = st.session_state.auth_user["uid"]
+        my_results = load_my_exam_results(uid)
+        if my_results:
+            st.session_state.exam_finished = True
+            st.session_state.exam_started = False
+            st.session_state.score = my_results[0].get("score", 0)
+
 
 def reset_exam_state():
     st.session_state.exam_started = False
@@ -1215,7 +1225,7 @@ else:
     # 1. CRITICAL PRIORITIZED TIMEOUT HANDLING LAYER
     if legacy_timeout_check or (st.session_state.exam_started and get_remaining_seconds() <= 0):
         finish_exam(timed_out=True)
-        st.session_state.exam_finished = True  # Explicitly assert state consistency
+        st.session_state.exam_finished = True  
         st.rerun()  
 
     # 2. EXAM EVALUATION COMPLETE SCREEN (AIRTIGHT ROUTING PRIORITY #1)
@@ -1245,7 +1255,13 @@ else:
             pass
 
         if st.button("Start New Exam Attempt", use_container_width=True):
-            clear_exam_attempt(auth_uid)
+            try:
+                clear_exam_attempt(auth_uid)
+                docs = db().collection(RESULTS_COLLECTION).where("auth_uid", "==", auth_uid).stream()
+                for d in docs:
+                    db().collection(RESULTS_COLLECTION).document(d.id).delete()
+            except Exception:
+                pass
             reset_exam_state()
             st.rerun()
 
