@@ -107,11 +107,11 @@ QUIZ_QUESTIONS = [
         ],
     },
     {
-        "id": 3,
-        "question": "Given value1=9, value2=4, what is the data type of A after the expression A = (value1 % value2 * 10) // 2.0** 3.0 + value2?",
-        "type": "mc",
-        "options": ["18.0", "5.0", "18", "22.0"],
-        "answer": "5.0",
+    "id": 3,
+    "question": "Given \n\tvalue1=9, \n\tvalue2=4, \n\twhat is the data type of A after the expression A = (value1 % value2 * 10) // 2.0** 3.0 + value2?",
+    "type": "mc",
+    "options": ["18.0", "5.0", "18", "22.0"],
+    "answer": "5.0"
     },
     {
         "id": 4,
@@ -401,18 +401,6 @@ print(formatted)""",
     },
     {
         "id": 25,
-        "question": """What is the output of the following Python code?
-
-name = "Alex"
-score = 85
-result = f"{name} scored {score}%"
-print(result)""",
-        "type": "mc",
-        "options": ["A. Alex scored 85%", "B. Alex scored score%", "C. name scored 85%", "D. Alex scored 85"],
-        "answer": "A. Alex scored 85%",
-    },
-    {
-        "id": 26,
         "question": """You are writing code that generates a random integer with a minimum value of 5 and a maximum value of 11.
 Which two functions should you use? Each correct answer presents a complete solution. (Choose two.)""",
         "type": "mc_multi",
