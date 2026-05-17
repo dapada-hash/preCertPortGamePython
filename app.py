@@ -75,7 +75,7 @@ PERIOD_OPTIONS = [
 ]
 
 # =================================================
-# QUIZ QUESTIONS
+# QUIZ QUESTIONS (FALLBACK ONLY)
 # =================================================
 QUIZ_QUESTIONS = [
     {
@@ -312,7 +312,7 @@ else:
     },
     {
         "id": 18,
-        "question": "Which character left-aligns formatted output in a field?",
+        "character": "Which character left-aligns formatted output in a field?",
         "type": "mc",
         "options": [
             "^ (The Caret)",
@@ -418,7 +418,7 @@ Which two functions should you use? Each correct answer presents a complete solu
 ]
 
 # =================================================
-# CSS CUSTOM RENDERING
+# CSS / LOOK
 # =================================================
 st.markdown(
     """
@@ -529,13 +529,21 @@ st.markdown(
         border-radius: 8px;
         margin-top: 30px;
     }
+
+    .teacher-box {
+        margin-top: 20px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        background-color: #f1f3f5;
+    }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # =================================================
-# COOKIE MANAGEMENT
+# COOKIE SETUP
 # =================================================
 cookies = None
 if COOKIE_MANAGER_AVAILABLE:
@@ -597,24 +605,53 @@ def get_teacher_emails():
 
 def firebase_sign_in_email_password(email: str, password: str):
     get_firestore_client()
+
     if not FIREBASE_WEB_API_KEY.strip():
         raise ValueError("Missing FIREBASE_WEB_API_KEY in secrets.")
 
-    url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_WEB_API_KEY}"
-    payload = {"email": email, "password": password, "returnSecureToken": True}
+    url = (
+        "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
+        f"?key={FIREBASE_WEB_API_KEY}"
+    )
+    payload = {
+        "email": email,
+        "password": password,
+        "returnSecureToken": True,
+    }
 
-    requests_resp = requests.post(url, json=payload, timeout=20)
-    data = requests_resp.json()
+    resp = requests.post(url, json=payload, timeout=20)
+    data = resp.json()
 
-    if requests_resp.status_code != 200:
+    if resp.status_code != 200:
         err_msg = data.get("error", {}).get("message", "Authentication failed.")
         raise ValueError(err_msg)
 
+    id_token = data.get("idToken", "")
+    refresh_token = data.get("refreshToken", "")
+    local_id = data.get("localId", "")
+
+    if not id_token:
+        raise ValueError("No Firebase ID token returned.")
+
     return {
-        "id_token": data.get("idToken", ""),
-        "refresh_token": data.get("refreshToken", ""),
-        "local_id": data.get("localId", ""),
+        "id_token": id_token,
+        "refresh_token": refresh_token,
+        "local_id": local_id,
     }
+
+
+def verify_firebase_id_token(id_token: str):
+    get_firestore_client()
+    return firebase_auth.verify_id_token(id_token)
+
+
+def create_firebase_session_cookie(id_token: str, expires_days: int = 5):
+    get_firestore_client()
+    expires_in_seconds = expires_days * 24 * 60 * 60
+    return firebase_auth.create_session_cookie(
+        id_token,
+        expires_in=expires_in_seconds
+    )
 
 
 def verify_firebase_session_cookie(session_cookie: str):
@@ -625,8 +662,7 @@ def verify_firebase_session_cookie(session_cookie: str):
 def persist_auth_cookie(id_token: str):
     if cookies is None:
         return
-    get_firestore_client()
-    session_cookie = firebase_auth.create_session_cookie(id_token, expires_in=5 * 24 * 60 * 60)
+    session_cookie = create_firebase_session_cookie(id_token, expires_days=5)
     cookies["firebase_session"] = session_cookie
     cookies.save()
 
@@ -634,9 +670,11 @@ def persist_auth_cookie(id_token: str):
 def restore_auth_from_cookie():
     if cookies is None:
         return False
+
     session_cookie = cookies.get("firebase_session", "")
     if not session_cookie:
         return False
+
     try:
         decoded = verify_firebase_session_cookie(session_cookie)
         email = str(decoded.get("email", "")).strip().lower()
@@ -652,22 +690,33 @@ def restore_auth_from_cookie():
         st.session_state.is_teacher = email in teacher_emails
         return True
     except Exception:
+        try:
+            cookies["firebase_session"] = ""
+            cookies.save()
+        except Exception:
+            pass
         return False
-    # =================================================
-# DATA PERSISTENCE COMPONENT LAYER
+# =================================================
+# FIRESTORE DATA LAYERS
 # =================================================
 def load_student_profiles():
     try:
         docs = db().collection(STUDENT_PROFILES_COLLECTION).stream()
-        res = [dict(d.to_dict(), id=d.id) for d in docs]
+        res = []
+        for d in docs:
+            v = d.to_dict()
+            v["id"] = d.id
+            res.append(v)
         return sorted(res, key=lambda x: (x.get("period", ""), x.get("last_name", ""), x.get("first_name", "")))
-    except Exception:
+    except Exception as e:
+        st.error(f"Error fetching student profiles: {e}")
         return []
 
 
 def upsert_student_profile(student_id: str, last_name: str, first_name: str, period: str):
     try:
-        db().collection(STUDENT_PROFILES_COLLECTION).document(student_id).set({
+        doc_ref = db().collection(STUDENT_PROFILES_COLLECTION).document(student_id)
+        doc_ref.set({
             "student_id": student_id,
             "last_name": last_name,
             "first_name": first_name,
@@ -675,23 +724,38 @@ def upsert_student_profile(student_id: str, last_name: str, first_name: str, per
             "updated_at": now_utc(),
         }, merge=True)
         return True
-    except Exception:
+    except Exception as e:
+        st.error(f"Error writing profile record: {e}")
         return False
 
 
 def load_all_exam_results():
     try:
         docs = db().collection(RESULTS_COLLECTION).stream()
-        res = [dict(d.to_dict(), id=d.id) for d in docs]
+        res = []
+        for d in docs:
+            v = d.to_dict()
+            v["id"] = d.id
+            res.append(v)
         return sorted(res, key=lambda x: x.get("submitted_at", ""), reverse=True)
-    except Exception:
+    except Exception as e:
+        st.error(f"Error reading class results: {e}")
         return []
 
 
 def load_my_exam_results(auth_uid: str):
     try:
-        docs = db().collection(RESULTS_COLLECTION).where("auth_uid", "==", auth_uid).stream()
-        res = [dict(d.to_dict(), id=d.id) for d in docs]
+        docs = (
+            db()
+            .collection(RESULTS_COLLECTION)
+            .where("auth_uid", "==", auth_uid)
+            .stream()
+        )
+        res = []
+        for d in docs:
+            v = d.to_dict()
+            v["id"] = d.id
+            res.append(v)
         return sorted(res, key=lambda x: x.get("submitted_at", ""), reverse=True)
     except Exception:
         return []
@@ -710,8 +774,8 @@ def load_exam_attempt(auth_uid: str):
 def save_exam_attempt(auth_uid: str, attempt_data: dict):
     try:
         db().collection(EXAM_ATTEMPTS_COLLECTION).document(auth_uid).set(attempt_data)
-    except Exception:
-        pass
+    except Exception as e:
+        st.error(f"Error persisting session branch to database: {e}")
 
 
 def clear_exam_attempt(auth_uid: str):
@@ -739,21 +803,72 @@ def save_final_exam_result(auth_uid: str, student_profile: dict, score: int, tot
         }
         db().collection(RESULTS_COLLECTION).document(doc_id).set(payload)
         return True
-    except Exception:
+    except Exception as e:
+        st.error(f"Critical submission failure: {e}")
         return False
 
 
 def get_student_profile_by_email(email: str):
     try:
         clean_email = email.strip().lower()
+        if "@" not in clean_email:
+            return None
+        parts = clean_email.split("@")[0].split(".")
+        if len(parts) >= 2:
+            f_candidate = parts[0]
+            l_candidate = parts[1]
+        else:
+            f_candidate = parts[0]
+            l_candidate = ""
+
         docs = db().collection(STUDENT_PROFILES_COLLECTION).stream()
         for d in docs:
             v = d.to_dict()
-            if str(v.get("student_id", "")).strip() and clean_email.startswith(str(v.get("student_id", "")).strip().lower()):
+            sid = str(v.get("student_id", "")).strip()
+            fname = str(v.get("first_name", "")).strip().lower()
+            lname = str(v.get("last_name", "")).strip().lower()
+
+            if sid and clean_email.startswith(sid.lower()):
+                return v
+            if fname and lname and (fname in clean_email) and (lname in clean_email):
+                return v
+            if fname and f_candidate == fname:
                 return v
     except Exception:
         pass
     return None
+
+# =================================================
+# APPLICATION STATE LIFECYCLE
+# =================================================
+def init_session_states():
+    if "auth_verified" not in st.session_state:
+        st.session_state.auth_verified = False
+    if "auth_user" not in st.session_state:
+        st.session_state.auth_user = None
+    if "is_teacher" not in st.session_state:
+        st.session_state.is_teacher = False
+    if "student_profile" not in st.session_state:
+        st.session_state.student_profile = None
+
+    if "exam_started" not in st.session_state:
+        st.session_state.exam_started = False
+    if "exam_finished" not in st.session_state:
+        st.session_state.exam_finished = False
+    if "timed_out" not in st.session_state:
+        st.session_state.timed_out = False
+    if "start_time_epoch" not in st.session_state:
+        st.session_state.start_time_epoch = 0.0
+    if "current_question_index" not in st.session_state:
+        st.session_state.current_question_index = 0
+    if "score" not in st.session_state:
+        st.session_state.score = 0
+    if "answers" not in st.session_state:
+        st.session_state.answers = {}
+    if "feedback" not in st.session_state:
+        st.session_state.feedback = None
+    if "warning_shown" not in st.session_state:
+        st.session_state.warning_shown = False
 
 
 def reset_exam_state():
@@ -768,10 +883,26 @@ def reset_exam_state():
     st.session_state.warning_shown = False
 
 
+def pull_and_sync_session_attempt(auth_uid: str):
+    attempt = load_exam_attempt(auth_uid)
+    if attempt:
+        st.session_state.exam_started = attempt.get("exam_started", False)
+        st.session_state.exam_finished = attempt.get("exam_finished", False)
+        st.session_state.timed_out = attempt.get("timed_out", False)
+        st.session_state.start_time_epoch = float(attempt.get("start_time_epoch", 0.0))
+        st.session_state.current_question_index = int(attempt.get("current_question_index", 0))
+        st.session_state.score = int(attempt.get("score", 0))
+        st.session_state.answers = attempt.get("answers", {})
+        st.session_state.feedback = attempt.get("feedback", None)
+        st.session_state.warning_shown = attempt.get("warning_shown", False)
+        return True
+    return False
+
+
 def push_session_attempt_to_cloud(auth_uid: str):
     if not st.session_state.exam_started:
         return
-    db().collection(EXAM_ATTEMPTS_COLLECTION).document(auth_uid).set({
+    payload = {
         "exam_started": st.session_state.exam_started,
         "exam_finished": st.session_state.exam_finished,
         "timed_out": st.session_state.timed_out,
@@ -782,118 +913,157 @@ def push_session_attempt_to_cloud(auth_uid: str):
         "feedback": st.session_state.feedback,
         "warning_shown": st.session_state.warning_shown,
         "last_updated_at": now_utc(),
-    })
+    }
+    save_exam_attempt(auth_uid, payload)
 
 
 def get_remaining_seconds():
     if not st.session_state.exam_started or st.session_state.start_time_epoch == 0:
         return QUIZ_DURATION_MINUTES * 60
     elapsed = time.time() - st.session_state.start_time_epoch
-    return max(0.0, (QUIZ_DURATION_MINUTES * 60) - elapsed)
+    total_allowed = QUIZ_DURATION_MINUTES * 60
+    return max(0.0, total_allowed - elapsed)
 
-
+# =================================================
+# CLIENT ASYNC TIMER BRIDGE
+# =================================================
 def render_js_timer():
     rem_sec = int(get_remaining_seconds())
     if rem_sec <= 0:
         return
-    components.html(f"""
-    <div id="t" style="font-size:1.5em; font-weight:bold; color:#dc3545; text-align:right; font-family:sans-serif;">00:00</div>
+
+    html_code = f"""
+    <div id="timer-display" style="font-size: 1.5em; font-weight: bold; color: #dc3545; text-align: right; font-family: sans-serif;">
+        00:00
+    </div>
     <script>
-        var s = {rem_sec};
-        function u() {{
-            if(s <= 0) {{
-                document.getElementById("t").innerHTML = "00:00";
-                setTimeout(function() {{ window.parent.location.reload(); }}, 300);
+        var remainingSeconds = {rem_sec};
+        var displayEl = document.getElementById("timer-display");
+
+        function updateDisplay() {{
+            if (remainingSeconds <= 0) {{
+                displayEl.innerHTML = "00:00";
+                clearInterval(intervalId);
+                // Fire window location reload to break streamlit context frame
+                setTimeout(function() {{ window.parent.location.reload(); }}, 500);
                 return;
             }}
-            var m = Math.floor(s / 60), sec = s % 60;
-            document.getElementById("t").innerHTML = (m<10?"0":"")+m+":"+(sec<10?"0":"")+sec;
-            s--;
+            var mins = Math.floor(remainingSeconds / 60);
+            var secs = remainingSeconds % 60;
+            var formatMins = mins < 10 ? "0" + mins : mins;
+            var formatSecs = secs < 10 ? "0" + secs : secs;
+            displayEl.innerHTML = formatMins + ":" + formatSecs;
+            remainingSeconds--;
         }}
-        u(); setInterval(u, 1000);
+
+        updateDisplay();
+        var intervalId = setInterval(updateDisplay, 1000);
     </script>
-    """, height=45)
+    """
+    components.html(html_code, height=45)
 
-
+# =================================================
+# ENGINE LOGIC CORE
+# =================================================
 def current_question():
     idx = st.session_state.current_question_index
-    return QUIZ_QUESTIONS[idx] if 0 <= idx < len(QUIZ_QUESTIONS) else None
+    if 0 <= idx < len(QUIZ_QUESTIONS):
+        return QUIZ_QUESTIONS[idx]
+    return None
 
-# =================================================
-# ENGINE LOGIC ACTIONS
-# =================================================
+
 def start_exam():
     st.session_state.exam_started = True
     st.session_state.exam_finished = False
+    st.session_state.timed_out = False
     st.session_state.start_time_epoch = time.time()
     st.session_state.current_question_index = 0
     st.session_state.score = 0
     st.session_state.answers = {}
+    st.session_state.feedback = None
+    st.session_state.warning_shown = False
     push_session_attempt_to_cloud(st.session_state.auth_user["uid"])
 
 
 def finish_exam(timed_out=False):
-    """
-    Forces instant database persistence regardless of incomplete or unsubmitted answers.
-    """
     st.session_state.exam_started = False
     st.session_state.exam_finished = True
     st.session_state.timed_out = timed_out
+    st.session_state.feedback = None
 
     uid = st.session_state.auth_user["uid"]
-    prof = st.session_state.student_profile or {"first_name": "Student", "last_name": "Profile"}
+    prof = st.session_state.student_profile or {"first_name": "Unknown", "last_name": "Student"}
 
-    # Commit whatever score they currently hold directly to the cloud
     save_final_exam_result(
         auth_uid=uid,
         student_profile=prof,
         score=st.session_state.score,
         total=len(QUIZ_QUESTIONS),
-        timed_out=timed_out
+        timed_out=timed_out,
     )
     clear_exam_attempt(uid)
 
 
 def submit_answer():
     q = current_question()
-    if not q: return
+    if not q:
+        return
+
     qid = str(q["id"])
-    is_correct = False
     user_ans = None
+    is_correct = False
 
     if q["type"] == "mc":
         user_ans = st.session_state.get(f"q_{q['id']}_radio")
         if not user_ans:
-            st.session_state.feedback = {"type": "missing", "message": "Please select an answer."}
+            st.session_state.feedback = {"type": "missing", "message": "Please select an answer before submitting."}
             return
         is_correct = (user_ans == q["answer"])
+
     elif q["type"] == "mc_multi":
-        selected = [opt for i, opt in enumerate(q["options"]) if st.session_state.get(f"q_{q['id']}_check_{i}")]
+        selected = []
+        for i, opt in enumerate(q["options"]):
+            if st.session_state.get(f"q_{q['id']}_check_{i}"):
+                selected.append(opt)
         if len(selected) != 2:
-            st.session_state.feedback = {"type": "missing", "message": "Select exactly two choices."}
+            st.session_state.feedback = {"type": "missing", "message": "Please select exactly two answers before submitting."}
             return
         user_ans = selected
         is_correct = (set(selected) == set(q["answer"]))
+
     elif q["type"] == "sequencing":
-        ans_list = [st.session_state.get(f"q_{q['id']}_order_{i}", "") for i in range(len(q["options"]))]
-        if "" in ans_list:
-            st.session_state.feedback = {"type": "missing", "message": "Complete all positioning items."}
+        ans_list = []
+        missing = False
+        for i in range(len(q["options"])):
+            val = st.session_state.get(f"q_{q['id']}_order_{i}", "")
+            if not val:
+                missing = True
+            ans_list.append(val)
+        if missing:
+            st.session_state.feedback = {"type": "missing", "message": "Please assign a item to every sequencing slot."}
             return
         user_ans = ans_list
         is_correct = (ans_list == q["answer"])
+
     elif q["type"] == "dropdown_sim":
-        ans_list = [st.session_state.get(f"q_{q['id']}_dd_{i}", "") for i in range(len(q["dropdowns"]))]
-        if "" in ans_list:
-            st.session_state.feedback = {"type": "missing", "message": "Complete all selections."}
+        ans_list = []
+        missing = False
+        for i in range(len(q["dropdowns"])):
+            val = st.session_state.get(f"q_{q['id']}_dd_{i}", "")
+            if not val:
+                missing = True
+            ans_list.append(val)
+        if missing:
+            st.session_state.feedback = {"type": "missing", "message": "Please select an option for all code matrix fields."}
             return
         user_ans = ans_list
         is_correct = (ans_list == q["answer"])
 
     if is_correct:
         st.session_state.score += 1
-        st.session_state.feedback = {"type": "correct", "message": "🎯 Answer logged!"}
+        st.session_state.feedback = {"type": "correct", "message": "🎯 Correct answer saved!"}
     else:
-        st.session_state.feedback = {"type": "incorrect", "message": "❌ Choice logged."}
+        st.session_state.feedback = {"type": "incorrect", "message": "❌ Answer recorded."}
 
     st.session_state.answers[qid] = user_ans
     push_session_attempt_to_cloud(st.session_state.auth_user["uid"])
@@ -907,230 +1077,301 @@ def next_question():
         st.session_state.current_question_index += 1
         push_session_attempt_to_cloud(st.session_state.auth_user["uid"])
 
-
 # =================================================
-# MAIN APPLICATION ENGINE RE-ROUTER
+# MAIN RENDER ENTRYWAY
 # =================================================
-if "auth_verified" not in st.session_state: st.session_state.auth_verified = False
-if "auth_user" not in st.session_state: st.session_state.auth_user = None
-if "is_teacher" not in st.session_state: st.session_state.is_teacher = False
-if "student_profile" not in st.session_state: st.session_state.student_profile = None
-if "exam_started" not in st.session_state: st.session_state.exam_started = False
-if "exam_finished" not in st.session_state: st.session_state.exam_finished = False
-
+init_session_states()
 restore_auth_from_cookie()
-
-# SECURE BACKEND INTERCEPT: Catch matching results in Firestore to protect UI boundaries
-if st.session_state.auth_verified and st.session_state.auth_user and not st.session_state.is_teacher:
-    uid = st.session_state.auth_user["uid"]
-    my_results = load_my_exam_results(uid)
-    if my_results:
-        st.session_state.exam_finished = True
-        st.session_state.exam_started = False
-        st.session_state.score = my_results[0].get("score", 0)
-
-if "timed_out" not in st.session_state: st.session_state.timed_out = False
-if "start_time_epoch" not in st.session_state: st.session_state.start_time_epoch = 0.0
-if "current_question_index" not in st.session_state: st.session_state.current_question_index = 0
-if "score" not in st.session_state: st.session_state.score = 0
-if "answers" not in st.session_state: st.session_state.answers = {}
-if "feedback" not in st.session_state: st.session_state.feedback = None
-if "warning_shown" not in st.session_state: st.session_state.warning_shown = False
 
 st.title("🐍 Advanced Programming Portal")
 
 if not st.session_state.auth_verified:
     st.subheader("Final Exam Portal Login")
     tab1, tab2 = st.tabs(["Sign In", "Create Student Profile"])
+
     with tab1:
         with st.form("login_form"):
             email_input = st.text_input("School Email").strip()
             pass_input = st.text_input("Access Password", type="password")
-            if st.form_submit_button("Authenticate Access", use_container_width=True):
-                try:
-                    res = firebase_sign_in_email_password(email_input, pass_input)
-                    persist_auth_cookie(res["id_token"])
-                    st.rerun()
-                except Exception as ex:
-                    st.error(f"Login Rejected: {ex}")
+            btn = st.form_submit_button("Authenticate Access", use_container_width=True)
+
+            if btn:
+                if not email_input or not pass_input:
+                    st.error("Please provide both email and password credentials.")
+                else:
+                    try:
+                        res = firebase_sign_in_email_password(email_input, pass_input)
+                        persist_auth_cookie(res["id_token"])
+                        st.success("Authorization verified! Syncing environment...")
+                        st.rerun()
+                    except Exception as ex:
+                        st.error(f"Login Rejected: {ex}")
+
     with tab2:
+        st.markdown("If you do not have an active database profile ID, create one here.")
         with st.form("register_profile_form"):
-            reg_id = st.text_input("Student ID Number").strip()
+            reg_id = st.text_input("Student ID Number (e.g., 100123)").strip()
             reg_first = st.text_input("First Name").strip()
             reg_last = st.text_input("Last Name").strip()
-            reg_period = st.selectbox("Class Period", PERIOD_OPTIONS)
-            if st.form_submit_button("Register Profile", use_container_width=True) and reg_id and reg_first and reg_last:
-                if upsert_student_profile(reg_id, reg_last, reg_first, reg_period):
-                    st.success("Profile saved! You can now log in.")
+            reg_period = st.selectbox("Class Period Assignment", PERIOD_OPTIONS)
+            reg_btn = st.form_submit_button("Register New Student Profile", use_container_width=True)
+
+            if reg_btn:
+                if not reg_id or not reg_first or not reg_last:
+                    st.error("All identification form values are explicitly mandatory.")
+                else:
+                    if upsert_student_profile(reg_id, reg_last, reg_first, reg_period):
+                        st.success(f"Profile saved! Student ID '{reg_id}' is authorized. Switch tabs to login.")
     st.stop()
 
+# =================================================
+# AUTHENTICATED SYSTEM DASHBOARDS
+# =================================================
 auth_user = st.session_state.auth_user
 auth_uid = auth_user["uid"]
 user_email = auth_user["email"]
 
+# Resolve Student Profile Context Info if user is not teacher
 if not st.session_state.is_teacher and st.session_state.student_profile is None:
     st.session_state.student_profile = get_student_profile_by_email(user_email) or {
-        "student_id": "STU-" + auth_uid[:6].upper(), "first_name": user_email.split("@")[0], "last_name": "Profile", "period": "Unassigned"
+        "student_id": "STU-" + auth_uid[:6].upper(),
+        "first_name": user_email.split("@")[0],
+        "last_name": "Profile",
+        "period": "Unassigned"
     }
 
+# Read state syncs from cloud database session tables once
 if st.session_state.exam_started and not st.session_state.answers:
-    attempt = load_exam_attempt(auth_uid)
-    if attempt:
-        st.session_state.exam_started = attempt.get("exam_started", False)
-        st.session_state.exam_finished = attempt.get("exam_finished", False)
-        st.session_state.start_time_epoch = float(attempt.get("start_time_epoch", 0.0))
-        st.session_state.current_question_index = int(attempt.get("current_question_index", 0))
-        st.session_state.score = int(attempt.get("score", 0))
-        st.session_state.answers = attempt.get("answers", {})
+    pull_and_sync_session_attempt(auth_uid)
 
-# CRITICAL BACKEND TIMEOUT DISPATCHER
+# Check legacy background time boundaries
+legacy_timeout_check = False
 if st.session_state.exam_started and get_remaining_seconds() <= 0:
-    finish_exam(timed_out=True)
-    st.rerun()
+    legacy_timeout_check = True
 
+# Top Action Toolbar
 col_user, col_logout = st.columns([3, 1])
-with col_user: st.markdown(f"**Account Active:** `{user_email}`")
+with col_user:
+    st.markdown(f"**Account Active:** `{user_email}`")
 with col_logout:
     if st.button("Log Out System", use_container_width=True):
-        if cookies is not None: cookies["firebase_session"] = ""
-        reset_exam_state()
+        if cookies is not None:
+            cookies["firebase_session"] = ""
+            cookies.save()
         st.session_state.auth_verified = False
+        st.session_state.auth_user = None
+        reset_exam_state()
         st.rerun()
 
-# --- ADMINISTRATIVE INSTRUCTOR VIEW ---
+# --- TEACHER VIEW ---
 if st.session_state.is_teacher:
     st.markdown("---")
+    st.subheader("🛠️ Administrative Instructor Dashboard")
     t_tabs = st.tabs(["Database Records Grid", "Active Exam Logs", "Roster Management Form"])
-    with t_tabs[0]:
-        st.dataframe(load_all_exam_results(), use_container_width=True)
-    with t_tabs[1]:
-        st.dataframe(load_student_profiles(), use_container_width=True)
 
-# --- STUDENT ASSESSMENT INTERFACE WORKFLOW ---
+    with t_tabs[0]:
+        st.markdown("### Final Evaluated Submissions Table")
+        all_results = load_all_exam_results()
+        if all_results:
+            st.dataframe(all_results, use_container_width=True)
+        else:
+            st.info("No completed final exams stored inside collection yet.")
+
+    with t_tabs[1]:
+        st.markdown("### Profile Verification Grid")
+        profiles = load_student_profiles()
+        if profiles:
+            st.dataframe(profiles, use_container_width=True)
+        else:
+            st.info("No valid profile nodes stored inside database instance collections.")
+
+    with t_tabs[2]:
+        st.markdown("### Manual Student Registry Updates")
+        with st.form("manual_teacher_upsert"):
+            m_id = st.text_input("Target Student ID").strip()
+            m_first = st.text_input("First Name").strip()
+            m_last = st.text_input("Last Name").strip()
+            m_period = st.selectbox("Assigned Period Loop", PERIOD_OPTIONS)
+            m_btn = st.form_submit_button("Commit Profile Record", use_container_width=True)
+            if m_btn:
+                if m_id and m_first and m_last:
+                    if upsert_student_profile(m_id, m_last, m_first, m_period):
+                        st.success(f"Profile {m_id} processed cleanly.")
+                        st.rerun()
+                else:
+                    st.error("Please fill all configuration elements.")
+
+# --- STUDENT VIEW ---
 else:
     st.markdown('<div class="quiz-shell">', unsafe_allow_html=True)
     student_profile = st.session_state.student_profile
 
-    h_left, h_right = st.columns([3, 1])
-    with h_left: 
+    header_left, header_right = st.columns([3, 1])
+    with header_left:
         st.markdown('<div class="header-title">Python Final Exam</div>', unsafe_allow_html=True)
-    with h_right:
-        if st.session_state.exam_started and not st.session_state.exam_finished:
+    with header_right:
+        if st.session_state.exam_started:
             render_js_timer()
         else:
-            st.markdown('<div class="timer-box" style="color:#6c757d;">Closed</div>' if st.session_state.exam_finished else f'<div class="timer-box">{QUIZ_DURATION_MINUTES:02d}:00</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="timer-box">{QUIZ_DURATION_MINUTES:02d}:00</div>', unsafe_allow_html=True)
 
-    # =================================================
-    # VIEW 1: PRIORITY GATE - EXAM EVALUATION COMPLETE
-    # =================================================
-    if st.session_state.exam_finished:
+    # 1. CRITICAL PRIORITIZED TIMEOUT HANDLING LAYER
+    if legacy_timeout_check or (st.session_state.exam_started and get_remaining_seconds() <= 0):
+        finish_exam(timed_out=True)
+        st.rerun()  # Instantly breaks loop processing and re-renders direct to section #4 below
+
+    # 2. INTRODUCTORY INSTRUCTIONS BAR LAYER
+    if not st.session_state.exam_started and not st.session_state.exam_finished:
+        st.markdown(
+            f'<div class="status-bar">{student_profile.get("first_name", "")} | ID: {student_profile.get("student_id", "")} | {student_profile.get("period", "")}</div>',
+            unsafe_allow_html=True,
+        )
+
+        try:
+            my_results = load_my_exam_results(auth_uid)
+            if my_results:
+                latest = my_results[0]
+                st.info(
+                    f"Previous saved score: {latest.get('score', 0)} / {latest.get('total_questions', 0)} "
+                    f"({latest.get('percentage', 0)}%)"
+                )
+        except Exception:
+            pass
+
+        st.markdown('<div class="question-box">', unsafe_allow_html=True)
+        st.markdown('<div class="question-title">Final Exam Instructions</div>', unsafe_allow_html=True)
+        st.write("You will answer one question at a time.")
+        st.write(f"You have **{QUIZ_DURATION_MINUTES} minutes** to complete the exam.")
+        st.write("If you refresh or close the browser, the timer keeps running in the background.")
+        st.write("Your score will be saved automatically when you finish or when time runs out.")
+        st.write("You need to score 82% or higher to pass the exam.")
+        st.error("⚠️ FINAL EXAM WARNING: Read each question carefully. After you submit an answer, you cannot go back and change it.")
+
+        if st.button("Start Final Exam", use_container_width=True):
+            start_exam()
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # 3. ACTIVE EVALUATION INTERACTIVE LAYER
+    elif st.session_state.exam_started and not st.session_state.exam_finished:
+        # Check warning time boundary threshold
+        if not st.session_state.warning_shown and get_remaining_seconds() <= (WARNING_MINUTES * 60):
+            st.session_state.warning_shown = True
+            push_session_attempt_to_cloud(auth_uid)
+
+        if st.session_state.warning_shown:
+            st.warning(f"⏱️ Warning: Only {WARNING_MINUTES} minutes remain in your exam window.")
+
+        st.markdown(
+            f'<div class="status-bar">Question {st.session_state.current_question_index + 1} of {len(QUIZ_QUESTIONS)} | Current Score: {st.session_state.score}</div>',
+            unsafe_allow_html=True,
+        )
+
+        question = current_question()
+        qid = question["id"]
+
+        st.markdown('<div class="question-box">', unsafe_allow_html=True)
+        st.markdown(
+    f'<div class="question-title">Q{st.session_state.current_question_index + 1}. {question["question"]}</div>',
+    unsafe_allow_html=True
+    )
+
+        if question["type"] == "mc":
+            st.radio(
+                "Select one answer",
+                question["options"],
+                key=f"q_{qid}_radio",
+                index=None,
+                label_visibility="collapsed",
+            )
+
+        elif question["type"] == "mc_multi":
+            st.write("Select two answers:")
+            for i, option in enumerate(question["options"]):
+                st.checkbox(option, key=f"q_{qid}_check_{i}")
+
+        elif question["type"] == "sequencing":
+            st.markdown(
+                '<div class="code-box">Arrange from top to bottom by selecting one item for each position.</div>',
+                unsafe_allow_html=True
+            )
+            options = [""] + question["options"]
+            for i in range(len(question["options"])):
+                st.selectbox(
+                    f"Position {i + 1}",
+                    options,
+                    key=f"q_{qid}_order_{i}",
+                )
+
+        elif question["type"] == "dropdown_sim":
+            if question.get("code"):
+                st.markdown(f'<div class="code-box">{question["code"]}</div>', unsafe_allow_html=True)
+
+            for i, dd in enumerate(question["dropdowns"]):
+                st.selectbox(
+                    dd["label"],
+                    [""] + dd["options"],
+                    key=f"q_{qid}_dd_{i}",
+                )
+
+        feedback = st.session_state.feedback
+        answered_this_question = str(question["id"]) in st.session_state.answers
+
+        if feedback:
+            if feedback["type"] == "correct":
+                st.markdown(f'<div class="feedback-good">{feedback["message"]}</div>', unsafe_allow_html=True)
+            elif feedback["type"] == "incorrect":
+                st.markdown(f'<div class="feedback-bad">{feedback["message"]}</div>', unsafe_allow_html=True)
+            elif feedback["type"] == "missing":
+                st.warning(feedback["message"])
+
+        if not answered_this_question:
+            if st.button("Submit Answer", use_container_width=True):
+                submit_answer()
+                st.rerun()
+        else:
+            button_text = "View Results" if st.session_state.current_question_index == len(QUIZ_QUESTIONS) - 1 else "Continue to Next Question"
+            if st.button(button_text, use_container_width=True):
+                next_question()
+                st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # 4. COMPLETED OR TIMED OUT VIEW RESULTS DISPLAY
+    elif st.session_state.exam_finished:
         percentage = round((st.session_state.score / len(QUIZ_QUESTIONS)) * 100, 2) if QUIZ_QUESTIONS else 0.0
-        msg = "🎉 Perfect score! Masterful job!" if percentage == 100 else ("👍 Excellent work! You have passed the certification standard threshold!" if percentage >= 82 else "📚 Evaluation complete. You did not meet the passing standard threshold.")
 
-        st.markdown('<div class="result-box"><h2>Exam Evaluation Complete</h2>', unsafe_allow_html=True)
+        if percentage == 100:
+            message = "🎉 Perfect score! Masterful job!"
+        elif percentage >= 82:
+            message = "👍 Excellent work! You have passed the certification standard threshold!"
+        else:
+            message = "📚 Evaluation complete. You did not meet the passing standard threshold."
+
+        st.markdown('<div class="result-box">', unsafe_allow_html=True)
+        st.markdown("<h2>Exam Evaluation Complete</h2>", unsafe_allow_html=True)
+        
+        # Display feedback if they hit a timeout flag
+        if st.session_state.get("timed_out"): 
+            st.error("⏰ Time ran out! Your active session session has closed and final states were compiled.")
+
         st.write(f"Your calculated score: **{st.session_state.score}** / **{len(QUIZ_QUESTIONS)}**")
         st.write(f"Final Percentage: **{percentage}%**")
-        st.markdown(f"### {msg}")
+        st.markdown(f"### {message}")
 
         try:
             my_results = load_my_exam_results(auth_uid)
             if my_results:
                 latest = my_results[0]
                 st.write(f"Cloud verified log score: **{latest.get('score', 0)} / {latest.get('total_questions', 0)}**")
-        except Exception: 
-            pass
-
-        if st.button("Start New Exam Attempt", use_container_width=True):
-            try:
-                clear_exam_attempt(auth_uid)
-                for d in db().collection(RESULTS_COLLECTION).where("auth_uid", "==", auth_uid).stream():
-                    db().collection(RESULTS_COLLECTION).document(d.id).delete()
-            except Exception: pass
-            reset_exam_state()
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    # =================================================
-    # VIEW 2: INITIAL INSTRUCTIONS GATE (Not Started & Not Finished)
-    # =================================================
-    elif not st.session_state.exam_started:
-        st.markdown(f'<div class="status-bar">{student_profile.get("first_name", "")} | ID: {student_profile.get("student_id", "")} | {student_profile.get("period", "")}</div>', unsafe_allow_html=True)
-        
-        try:
-            my_results = load_my_exam_results(auth_uid)
-            if my_results:
-                latest = my_results[0]
-                st.info(f"Previous saved score: {latest.get('score', 0)} / {latest.get('total_questions', 0)} ({latest.get('percentage', 0)}%)")
         except Exception:
             pass
 
-        st.markdown('<div class="question-box"><div class="question-title">Final Exam Instructions</div>', unsafe_allow_html=True)
-        st.write("You will answer one question at a time.")
-        st.write(f"You have **{QUIZ_DURATION_MINUTES} minutes** to complete the exam.")
-        st.write("If you refresh or close the browser, the timer keeps running in the background.")
-        st.write("Your score will be saved automatically when you finish each question.")
-        st.write("You need to score 84% or higher to pass the exam.")
-        st.write("After you submit an answer, you will receive immediate feedback and your answer will be locked in for that question.")
-        st.write("You can start the exam at any time, but once you begin, the timer will start and cannot be paused.")
-        st.write("Make sure you submit your answers before the timer runs out. If time expires, the exam will end and your scores  will not be recorded.")
-        st.error("⚠️ FINAL EXAM WARNING: Read each question carefully. After you submit an answer, you cannot go back and change it.")
-        
-        if st.button("Start Final Exam", use_container_width=True):
-            start_exam()
+        if st.button("Start New Exam Attempt", use_container_width=True):
+            clear_exam_attempt(auth_uid)
+            reset_exam_state()
             st.rerun()
+
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # =================================================
-    # VIEW 3: ACTIVE EVALUATION PORTAL (Only runs if Exam Started)
-    # =================================================
-    else:
-        if not st.session_state.warning_shown and get_remaining_seconds() <= (WARNING_MINUTES * 60):
-            st.session_state.warning_shown = True
-            push_session_attempt_to_cloud(auth_uid)
-        if st.session_state.warning_shown:
-            st.warning(f"⏱️ Warning: Only {WARNING_MINUTES} minutes remain in your exam window.")
-
-        st.markdown(f'<div class="status-bar">Question {st.session_state.current_question_index + 1} of {len(QUIZ_QUESTIONS)} | Current Score: {st.session_state.score}</div>', unsafe_allow_html=True)
-        
-        question = current_question()
-        if question:
-            st.markdown(f'<div class="question-box"><div class="question-title">Q{st.session_state.current_question_index + 1}. {question["question"]}</div>', unsafe_allow_html=True)
-
-            if question["type"] == "mc":
-                st.radio("Select one answer", question["options"], key=f"q_{question['id']}_radio", index=None, label_visibility="collapsed")
-            elif question["type"] == "mc_multi":
-                st.write("Select two answers:")
-                for i, opt in enumerate(question["options"]): 
-                    st.checkbox(opt, key=f"q_{question['id']}_check_{i}")
-            elif question["type"] == "sequencing":
-                st.markdown('<div class="code-box">Arrange from top to bottom by selecting one item for each position.</div>', unsafe_allow_html=True)
-                for i in range(len(question["options"])): 
-                    st.selectbox(f"Position {i + 1}", [""] + question["options"], key=f"q_{question['id']}_order_{i}")
-            elif question["type"] == "dropdown_sim":
-                if question.get("code"): 
-                    st.markdown(f'<div class="code-box">{question["code"]}</div>', unsafe_allow_html=True)
-                for i, dd in enumerate(question["dropdowns"]): 
-                    st.selectbox(dd["label"], [""] + dd["options"], key=f"q_{question['id']}_dd_{i}")
-
-            if st.session_state.feedback:
-                if st.session_state.feedback["type"] == "correct":
-                    st.markdown(f'<div class="feedback-good">{st.session_state.feedback["message"]}</div>', unsafe_allow_html=True)
-                elif st.session_state.feedback["type"] == "incorrect":
-                    st.markdown(f'<div class="feedback-bad">{st.session_state.feedback["message"]}</div>', unsafe_allow_html=True)
-                elif st.session_state.feedback["type"] == "missing":
-                    st.warning(st.session_state.feedback["message"])
-
-            if str(question["id"]) not in st.session_state.answers:
-                if st.button("Submit Answer", use_container_width=True):
-                    submit_answer()
-                    st.rerun()
-            else:
-                lbl = "View Results" if st.session_state.current_question_index == len(QUIZ_QUESTIONS) - 1 else "Continue to Next Question"
-                if st.button(lbl, use_container_width=True):
-                    next_question()
-                    st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-        else:
-            st.error("Error: Question data could not be parsed securely.")
-
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)    
