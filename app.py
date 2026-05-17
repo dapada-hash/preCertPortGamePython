@@ -184,7 +184,7 @@ if __name__ == '__main__':
         "question": """Given the list My_list containing all lowercase letters, what is the correct output sequence for new_slice_3_to_6 followed by new_slice_to_6?
 
 My_list = ['a', 'b', 'c', 'd', 'e', 'f', 'g', ... 'z']
-new_slice_3_to_6 = My_list[3:6]
+new_slice_3_to_6 = My_list[3:6]<br>&nbsp;&nbsp;&nbsp;&nbsp;
 new_slice_to_6 = My_list[:6]""",
         "type": "mc",
         "options": [
@@ -1104,7 +1104,7 @@ else:
         st.write("You can start the exam at any time, but once you begin, the timer will start and cannot be paused.")
         st.write("Make sure you submit your answers before the timer runs out. If time expires, the exam will end and your scores will be recorded.")
         st.write("You need to answer each question to move on to the next one.")
-        st.write("You need to score <b>84%</b> or higher to pass the exam.")
+        st.write("You need to score 84% or higher to pass the exam.")
         st.error("⚠️ FINAL EXAM WARNING: Read each question carefully. After you submit an answer, you cannot go back and change it.")
         
         if st.button("Start Final Exam", use_container_width=True):
