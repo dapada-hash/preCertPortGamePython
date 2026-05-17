@@ -635,7 +635,7 @@ def restore_auth_from_cookie():
         return True
     except Exception:
         return False
-    # =================================================
+ # =================================================
 # DATA PERSISTENCE COMPONENT LAYER
 # =================================================
 def load_student_profiles():
@@ -667,10 +667,10 @@ def load_all_exam_results():
         res = []
         for d in docs:
             v = d.to_dict()
-            first = v.get("first_name", "")
-            last = v.get("last_name", "")
             if "student_name" not in v:
-                v["student_name"] = f"{last}, {first}".strip(", ")
+                first = v.get("first_name", "").strip()
+                last = v.get("last_name", "").strip()
+                v["student_name"] = first if first else last
             res.append(v)
         return sorted(res, key=lambda x: x.get("submitted_at", ""), reverse=True)
     except Exception:
@@ -715,9 +715,11 @@ def save_final_exam_result(auth_uid: str, student_profile: dict, score: int, tot
         percentage = round((score / total) * 100, 1) if total > 0 else 0.0
         doc_id = f"{auth_uid}_{int(time.time())}"
         
-        first_name = student_profile.get("first_name", "")
-        last_name = student_profile.get("last_name", "")
-        full_name = f"{last_name}, {first_name}".strip(", ") if (first_name or last_name) else "Anonymous Student"
+        first_name = student_profile.get("first_name", "").strip()
+        last_name = student_profile.get("last_name", "").strip()
+        
+        # Formats the name cleanly as a single real name string (e.g., "Darly")
+        full_name = first_name if first_name else (last_name if last_name else "Student")
         student_email = st.session_state.auth_user.get("email", "No Email Logged")
 
         payload = {
@@ -838,7 +840,7 @@ def finish_exam(timed_out=False):
     st.session_state.timed_out = timed_out
 
     uid = st.session_state.auth_user["uid"]
-    prof = st.session_state.student_profile or {"first_name": "Student", "last_name": "Profile"}
+    prof = st.session_state.student_profile or {"first_name": "Student", "last_name": ""}
 
     save_final_exam_result(
         auth_uid=uid,
@@ -965,7 +967,7 @@ user_email = auth_user["email"]
 
 if not st.session_state.is_teacher and st.session_state.student_profile is None:
     st.session_state.student_profile = get_student_profile_by_email(user_email) or {
-        "student_id": "STU-" + auth_uid[:6].upper(), "first_name": user_email.split("@")[0], "last_name": "Profile", "period": "Unassigned"
+        "student_id": "STU-" + auth_uid[:6].upper(), "first_name": user_email.split("@")[0], "last_name": "", "period": "Unassigned"
     }
 
 if st.session_state.auth_verified and not st.session_state.is_teacher and not st.session_state.exam_finished:
@@ -1010,7 +1012,6 @@ if st.session_state.is_teacher:
         raw_results = load_all_exam_results()
         if raw_results:
             df = pd.DataFrame(raw_results)
-            # Strict layout reordering to precisely match the target design
             preferred_cols = [
                 "period", "student_id", "student_name", "student_email", 
                 "percentage", "score"
