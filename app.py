@@ -210,10 +210,10 @@ new_slice_to_6 = My_list[:6]""",
     },
     {
         "id": 8,
-        "question": "Given the command 'main.py this beautiful nature', which value is stored at index position 2 in the sys.argv list?",
+        "question": "Given the command 'main.py this beautiful nature', which value is stored at index position 1 in the sys.argv list?",
         "type": "mc",
-        "options": ["main.py", "this", "beautiful", "nature"],
-        "answer": "beautiful",
+        "options": ["main.py", "Jesus", "is", "love"],
+        "answer": "Jesus",
     },
     {
         "id": 9,
@@ -365,11 +365,11 @@ d = datetime(2026, 3, 23)""",
 
 from datetime import datetime
 d = datetime(2026, 3, 23)
-result = d.strftime("%A")
+result = d.strftime("%Y-%m-%d")
 print(result)""",
         "type": "mc",
-        "options": ["A. Monday", "B. 03", "C. March", "D. 26"],
-        "answer": "A. Monday",
+        "options": ["A. 2026-03-23", "B. 2026-23-03", "C. 03-23-2026", "D. 23-03-2026"],
+        "answer": "A. 2026-03-23",
     },
     {
         "id": 23,
@@ -401,6 +401,18 @@ print(formatted)""",
     },
     {
         "id": 25,
+        "question": """What is the output of the following Python code?
+
+name = "Alex"
+score = 85
+result = f"{name} scored {score}%"
+print(result)""",
+        "type": "mc",
+        "options": ["A. Alex scored 85%", "B. Alex scored score%", "C. name scored 85%", "D. Alex scored 85"],
+        "answer": "A. Alex scored 85%",
+    },
+    {
+        "id": 26,
         "question": """You are writing code that generates a random integer with a minimum value of 5 and a maximum value of 11.
 Which two functions should you use? Each correct answer presents a complete solution. (Choose two.)""",
         "type": "mc_multi",
