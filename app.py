@@ -1100,11 +1100,11 @@ else:
         st.write(f"You have **{QUIZ_DURATION_MINUTES} minutes** to complete the exam.")
         st.write("If you refresh or close the browser, the timer keeps running in the background.")
         st.write("Your score will be saved automatically when you finish the exam.")
-        st.write("You need to score 84% or higher to pass the exam.")
         st.write("After you submit an answer, you will receive immediate feedback and your answer will be locked in for that question.")
         st.write("You can start the exam at any time, but once you begin, the timer will start and cannot be paused.")
         st.write("Make sure you submit your answers before the timer runs out. If time expires, the exam will end and your scores will be recorded.")
-        st.write("you need to answer the question to move on to the next one.")
+        st.write("You need to answer each question to move on to the next one.")
+        st.write("You need to score 84% or higher to pass the exam.")
         st.error("⚠️ FINAL EXAM WARNING: Read each question carefully. After you submit an answer, you cannot go back and change it.")
         
         if st.button("Start Final Exam", use_container_width=True):
