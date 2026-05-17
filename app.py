@@ -982,9 +982,18 @@ auth_uid = auth_user["uid"]
 user_email = auth_user["email"]
 
 if not st.session_state.is_teacher and st.session_state.student_profile is None:
-    st.session_state.student_profile = get_student_profile_by_email(user_email) or {
-        "student_id": "STU-" + auth_uid[:6].upper(), "first_name": user_email.split("@")[0], "last_name": "", "period": "Unassigned"
-    }
+
+    found_profile = get_student_profile_by_email(user_email)
+
+    if found_profile:
+        st.session_state.student_profile = found_profile
+    else:
+        st.session_state.student_profile = {
+            "student_id": "STU-" + auth_uid[:6].upper(),
+            "first_name": "Student",
+            "last_name": "",
+            "period": "Unassigned"
+        }
 
 if st.session_state.auth_verified and not st.session_state.is_teacher and not st.session_state.exam_finished:
     attempt = load_exam_attempt(auth_uid)
