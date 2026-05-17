@@ -1039,9 +1039,15 @@ def start_exam():
 
 
 def finish_exam(timed_out: bool = False):
+    # Prevent double execution (VERY IMPORTANT in Streamlit reruns)
+    if st.session_state.get("exam_finished", False):
+        return
+
     st.session_state.exam_started = False
     st.session_state.exam_finished = True
+    st.session_state.feedback = None
 
+    # Save result only once
     if not st.session_state.saved_result and st.session_state.student_profile:
         save_exam_result(
             st.session_state.student_profile,
@@ -1051,15 +1057,19 @@ def finish_exam(timed_out: bool = False):
         )
         st.session_state.saved_result = True
 
-    save_exam_attempt(auth_uid, {
-        "finished": True,
-        "saved_result": True,
-        "timed_out": bool(timed_out),
-        "score": st.session_state.score,
-        "current_question_index": st.session_state.current_question_index,
-        "answers": st.session_state.answers,
-        "warning_shown": st.session_state.warning_shown,
-    })
+    # Persist final attempt state
+    try:
+        save_exam_attempt(auth_uid, {
+            "finished": True,
+            "saved_result": True,
+            "timed_out": timed_out,
+            "score": st.session_state.score,
+            "answers": st.session_state.answers,
+            "current_question_index": st.session_state.current_question_index,
+            "warning_shown": st.session_state.warning_shown,
+        })
+    except Exception:
+        pass
 
 
 def get_remaining_seconds():
@@ -1335,9 +1345,9 @@ else:
             )
 
     # force timeout check on every rerun
-    if st.session_state.exam_started and get_remaining_seconds() <= 0:
-        finish_exam(timed_out=True)
-        st.rerun()
+    # FINAL TIMEOUT HANDLER (CLEAN FIX)
+if st.session_state.exam_started and get_remaining_seconds() <= 0:
+    finish_exam(timed_out=True)
 
     if not st.session_state.exam_started and not st.session_state.exam_finished:
         st.markdown(
@@ -1362,7 +1372,7 @@ else:
         st.write(f"You have **{QUIZ_DURATION_MINUTES} minutes** to complete the exam.")
         st.write("If you refresh or close the browser, the timer keeps running.")
         st.write("Your score will be saved automatically when you finish or when time runs out.")
-        st.write("You need to score 82% or higher to pass the exam.")
+        st.write("You need to score 84% or higher to pass the exam.")
         st.error("⚠️ FINAL EXAM WARNING: Read each question carefully. After you submit an answer, you cannot go back and change it.")
 
         if st.button("Start Final Exam", use_container_width=True):
