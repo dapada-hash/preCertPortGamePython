@@ -291,17 +291,25 @@ else:
         "answer": "True",
     },
     {
-        "id": 15,
-        "question": "Which option correctly creates a docstring and comments out the print line?",
-        "type": "mc",
-        "options": [
-            "DROPDOWN 1: Triple Single Quotes | DROPDOWN 2: Double Slash (//)",
-            "DROPDOWN 1: Double Quotes | DROPDOWN 2: Hash (#)",
-            "DROPDOWN 1: Triple Double Quotes | DROPDOWN 2: Hash (#)",
-            "DROPDOWN 1: Triple Double Quotes | DROPDOWN 2: Double Slash (//)",
-        ],
-        "answer": "DROPDOWN 1: Triple Double Quotes | DROPDOWN 2: Hash (#)",
-    },
+    "id": 15,
+    "question": """Which option correctly creates a docstring and comments out the print line in Python?
+
+<br>&nbsp;&nbsp;&nbsp;&nbsp;[DROPDOWN 1]
+<br>&nbsp;&nbsp;&nbsp;&nbsp;This is a helper function
+<br>&nbsp;&nbsp;&nbsp;&nbsp;that calculates tax.
+<br>&nbsp;&nbsp;&nbsp;&nbsp;[DROPDOWN 1]
+<br>&nbsp;&nbsp;&nbsp;&nbsp;def calculate_tax(price):
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[DROPDOWN 2] print("Calculating...")
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return price * 0.05""",
+    "type": "mc",
+    "options": [
+        "DROPDOWN 1: Triple Single Quotes | DROPDOWN 2: Double Slash (//)",
+        "DROPDOWN 1: Double Quotes | DROPDOWN 2: Hash (#)",
+        "DROPDOWN 1: Triple Double Quotes | DROPDOWN 2: Hash (#)",
+        "DROPDOWN 1: Triple Double Quotes | DROPDOWN 2: Double Slash (//)"
+    ],
+    "answer": "DROPDOWN 1: Triple Double Quotes | DROPDOWN 2: Hash (#)"
+},
     {
         "id": 16,
         "question": "Which method reads only the first line of a file?",
