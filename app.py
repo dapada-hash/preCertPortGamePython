@@ -885,11 +885,17 @@ def render_js_timer():
     <div id="t" style="font-size:1.5em; font-weight:bold; color:#dc3545; text-align:right; font-family:sans-serif;">00:00</div>
     <script>
         var s = {rem_sec};
+        var warned = false;
         function u() {{
             if(s <= 0) {{
                 document.getElementById("t").innerHTML = "00:00";
                 setTimeout(function() {{ window.parent.location.reload(); }}, 300);
                 return;
+            }}
+            // Force an automatic page reload at exactly 5:00 (300s) remaining to display the warning banner natively
+            if (s === 300 && !warned) {{
+                warned = true;
+                setTimeout(function() {{ window.parent.location.reload(); }}, 500);
             }}
             var m = Math.floor(s / 60), sec = s % 60;
             document.getElementById("t").innerHTML = (m<10?"0":"")+m+":"+(sec<10?"0":"")+sec;
