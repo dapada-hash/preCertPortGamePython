@@ -253,12 +253,21 @@ else:
     "answer": "Prints three rows, each followed by three inner loop values (1, 2, and 3)."
 },
     {
-        "id": 11,
-        "question": "If a player starts a new game and scores on their very first turn, what value must be passed to increment_score(current_score) first?",
-        "type": "mc",
-        "options": ["1", "2", "0", "None"],
-        "answer": "0",
-    },
+    "id": 11,
+    "question": """If a player starts a new game and scores on their very first turn, what value must be passed to increment_score(current_score) first?
+
+<br>&nbsp;&nbsp;&nbsp;&nbsp;def increment_score(current_score):
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return current_score + 1
+<br><br>Choose the correct initial value:""",
+    "type": "mc",
+    "options": [
+        "1",
+        "2",
+        "0",
+        "None"
+    ],
+    "answer": "0"
+},
     {
         "id": 12,
         "question": "What is the output of the try/except/else/finally structure when 10 / 2 succeeds?",
