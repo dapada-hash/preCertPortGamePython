@@ -429,7 +429,7 @@ Which two functions should you use? Each correct answer presents a complete solu
     "answer": "B. banana"
     },
     {
-    "id": 28,
+    "id": 27,
     "question": """What is the output of the following Python code?
 
 <br>&nbsp;&nbsp;&nbsp;&nbsp;total = 0
@@ -440,6 +440,19 @@ Which two functions should you use? Each correct answer presents a complete solu
     "options": ["A. 3", "B. 6", "C. 10", "D. 0"],
     "answer": "B. 6",
 },
+{
+        "id": 28,
+        "question": """What is the output of the following Python code?
+
+<br>&nbsp;&nbsp;&nbsp;&nbsp;def calculate_total(price, tax=0.05):
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return price + (price * tax)
+<br>&nbsp;&nbsp;&nbsp;&nbsp;
+<br>&nbsp;&nbsp;&nbsp;&nbsp;result = calculate_total(100)
+<br>&nbsp;&nbsp;&nbsp;&nbsp;print(result)""",
+        "type": "mc",
+        "options": ["A. 100", "B. 105.0", "C. 5.0", "D. TypeError: missing 1 required positional argument"],
+        "answer": "B. 105.0",
+    },
 ]
 
 # =================================================
