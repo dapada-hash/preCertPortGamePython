@@ -213,7 +213,7 @@ new_slice_to_6 = My_list[:6]""",
     },
     {
         "id": 8,
-        "question": "Given the command 'main.py Jesus is love', which value is stored at index position 1 in the sys.argv list?",
+        "question": "Given the command 'main.py this beautiful nature', which value is stored at index position 1 in the sys.argv list?",
         "type": "mc",
         "options": ["main.py", "Jesus", "is", "love"],
         "answer": "Jesus",
@@ -233,16 +233,24 @@ else:
         "answer": "your grade is F",
     },
     {
-        "id": 10,
-        "question": "Analyze the following nested loop output.",
+    "id": 10,
+    "question": """Analyze the following nested loop code:
+
+    <br>&nbsp;&nbsp;&nbsp;&nbsp;row = 1
+    <br>&nbsp;&nbsp;&nbsp;&nbsp;while row <= 3:
+    <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;print(f"Outer Loop (Row) # {row}:")
+    <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;for col in range(1, 4):
+    <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;print(f"Inner Loop Value: {col}")
+    <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;row += 1
+    <br><br>What is the visual behavior of the print statement output? """,
         "type": "mc",
         "options": [
             "Only prints 'Outer Loop (Row) # 1:' and 'Inner Loop Value: 1 2 3'",
             "Prints three rows, each followed by three inner loop values (1, 2, and 3).",
             "The code produces an infinite loop.",
-            "Prints 'Outer Loop (Row) # 3:' and 'Inner Loop Value: 1 2 3' only.",
+            "Prints 'Outer Loop (Row) # 3:' and 'Inner Loop Value: 1 2 3' only."
         ],
-        "answer": "Prints three rows, each followed by three inner loop values (1, 2, and 3).",
+        "answer": "Prints three rows, each followed by three inner loop values (1, 2, and 3)."
     },
     {
         "id": 11,
