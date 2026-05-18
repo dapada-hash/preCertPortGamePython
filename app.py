@@ -382,8 +382,7 @@ d = datetime(2026, 3, 23)""",
         "id": 22,
         "question": """What is the output of the following Python code?
 
-from datetime 
-<br>&nbsp;&nbsp;&nbsp;&nbsp;import datetime
+from datetime <br>&nbsp;&nbsp;&nbsp;&nbsp;import datetime
 <br>&nbsp;&nbsp;&nbsp;&nbsp;d = datetime(2026, 3, 23)
 <br>&nbsp;&nbsp;&nbsp;&nbsp;result = d.strftime("%Y-%m-%d")
 print(result)""",
