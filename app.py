@@ -363,17 +363,24 @@ else:
         "answer": ["{0:10}", "{0:0<10}", "{0:^10}"],
     },
     {
-        "id": 20,
-        "question": "What happens if outer_count += 1 is removed from the while loop?",
-        "type": "mc",
-        "options": [
-            "The code produces an error because the 'for' loop cannot exit the 'while' loop.",
-            "The 'while' loop executes only once, as Python automatically breaks loops without a counter.",
-            "An infinite loop occurs, continuously printing the row header and the inner loop values.",
-            "The code completes successfully but only prints the header for Row #1.",
-        ],
-        "answer": "An infinite loop occurs, continuously printing the row header and the inner loop values.",
-    },
+    "id": 20,
+    "question": """What happens if outer_count += 1 is removed from the following while loop?
+
+<br>&nbsp;&nbsp;&nbsp;&nbsp;outer_count = 1
+<br>&nbsp;&nbsp;&nbsp;&nbsp;while outer_count <= 3:
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;print(f"Row {outer_count}:")
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;for inner_count in range(1, 4):
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;print(inner_count)
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;outer_count += 1""",
+    "type": "mc",
+    "options": [
+        "The code produces an error because the 'for' loop cannot exit the 'while' loop.",
+        "The 'while' loop executes only once, as Python automatically breaks loops without a counter.",
+        "An infinite loop occurs, continuously printing the row header and the inner loop values.",
+        "The code completes successfully but only prints the header for Row #1."
+    ],
+    "answer": "An infinite loop occurs, continuously printing the row header and the inner loop values."
+},
     {
         "id": 21,
         "question": "Match each strftime format code with its correct output.",
