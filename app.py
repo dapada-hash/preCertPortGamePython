@@ -226,7 +226,7 @@ if grade >= 80 and rank == 2:
     <br>&nbsp;&nbsp;&nbsp;print("your grade is B")<br>
 elif grade < 70 and rank == 2:  
     <br>&nbsp;&nbsp;&nbsp;print("your grade is C") <br>
-else:<br>
+else:
     <br>&nbsp;&nbsp;&nbsp;print("your grade is F")""",
         "type": "mc",
         "options": ["your grade is B", "your grade is C", "your grade is F", "SyntaxError"],
