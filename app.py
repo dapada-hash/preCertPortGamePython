@@ -232,26 +232,26 @@ else:
         "options": ["your grade is B", "your grade is C", "your grade is F", "SyntaxError"],
         "answer": "your grade is F",
     },
-    {
+   {
     "id": 10,
     "question": """Analyze the following nested loop code:
 
-    <br>&nbsp;&nbsp;&nbsp;&nbsp;row = 1
-    <br>&nbsp;&nbsp;&nbsp;&nbsp;while row <= 3:
-    <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;print(f"Outer Loop (Row) # {row}:")
-    <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;for col in range(1, 4):
-    <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;print(f"Inner Loop Value: {col}")
-    <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;row += 1
-    <br><br>What is the visual behavior of the print statement output? """,
-        "type": "mc",
-        "options": [
-            "Only prints 'Outer Loop (Row) # 1:' and 'Inner Loop Value: 1 2 3'",
-            "Prints three rows, each followed by three inner loop values (1, 2, and 3).",
-            "The code produces an infinite loop.",
-            "Prints 'Outer Loop (Row) # 3:' and 'Inner Loop Value: 1 2 3' only."
-        ],
-        "answer": "Prints three rows, each followed by three inner loop values (1, 2, and 3)."
-    },
+<br>&nbsp;&nbsp;&nbsp;&nbsp;row = 1
+<br>&nbsp;&nbsp;&nbsp;&nbsp;while row <= 3:
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;print(f"Outer Loop (Row) # {row}:")
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;for col in range(1, 4):
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;print(f"Inner Loop Value: {col}")
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;row += 1
+<br><br>What is the visual behavior of the print statement output? """,
+    "type": "mc",
+    "options": [
+        "Only prints 'Outer Loop (Row) # 1:' and 'Inner Loop Value: 1 2 3'",
+        "Prints three rows, each followed by three inner loop values (1, 2, and 3).",
+        "The code produces an infinite loop.",
+        "Prints 'Outer Loop (Row) # 3:' and 'Inner Loop Value: 1 2 3' only."
+    ],
+    "answer": "Prints three rows, each followed by three inner loop values (1, 2, and 3)."
+},
     {
         "id": 11,
         "question": "If a player starts a new game and scores on their very first turn, what value must be passed to increment_score(current_score) first?",
