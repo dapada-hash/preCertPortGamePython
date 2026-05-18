@@ -691,7 +691,7 @@ def restore_auth_from_cookie():
         return True
     except Exception:
         return False
- # =================================================
+# =================================================
 # DATA PERSISTENCE COMPONENT LAYER
 # =================================================
 def load_student_profiles():
@@ -703,17 +703,41 @@ def load_student_profiles():
         return []
 
 
-def upsert_student_profile(student_id: str, last_name: str, first_name: str, period: str):
+def upsert_student_profile(student_id: str, last_name: str, first_name: str, period: str, email: str, password: str = None):
     try:
+        clean_email = email.strip().lower()
+        # 1. Save profile details securely inside Firestore
         db().collection(STUDENT_PROFILES_COLLECTION).document(student_id).set({
             "student_id": student_id,
             "last_name": last_name,
             "first_name": first_name,
             "period": period,
+            "email": clean_email,
             "updated_at": now_utc(),
         }, merge=True)
+
+        # 2. Provision Auth credentials inside Firebase Auth database
+        try:
+            user = firebase_auth.get_user_by_email(clean_email)
+            if password and password.strip():
+                firebase_auth.update_user(user.uid, password=password)
+        except firebase_auth.UserNotFoundError:
+            create_args = {
+                "email": clean_email,
+                "display_name": f"{first_name} {last_name}".strip(),
+            }
+            if password and password.strip():
+                create_args["password"] = password
+            
+            try:
+                # Use sanitized student_id as UID for relational simplicity
+                firebase_auth.create_user(uid=student_id, **create_args)
+            except Exception:
+                # Fallback to random UID if student_id contains Auth-incompatible characters
+                firebase_auth.create_user(**create_args)
         return True
-    except Exception:
+    except Exception as e:
+        st.error(f"Failed to register authentication credentials: {e}")
         return False
 
 
@@ -801,6 +825,12 @@ def save_final_exam_result(auth_uid: str, student_profile: dict, score: int, tot
 def get_student_profile_by_email(email: str):
     try:
         clean_email = email.strip().lower()
+        # Direct email lookups
+        docs = db().collection(STUDENT_PROFILES_COLLECTION).where("email", "==", clean_email).stream()
+        for d in docs:
+            return d.to_dict()
+
+        # Fallback profile lookup matching engine
         docs = db().collection(STUDENT_PROFILES_COLLECTION).stream()
         for d in docs:
             v = d.to_dict()
@@ -851,37 +881,21 @@ def render_js_timer():
     rem_sec = int(get_remaining_seconds())
     if rem_sec <= 0:
         return
-
     components.html(f"""
     <div id="t" style="font-size:1.5em; font-weight:bold; color:#dc3545; text-align:right; font-family:sans-serif;">00:00</div>
-
     <script>
         var s = {rem_sec};
-
         function u() {{
-
             if(s <= 0) {{
                 document.getElementById("t").innerHTML = "00:00";
-
-                // Force immediate refresh to trigger auto-submit
-                window.parent.location.reload();
-
+                setTimeout(function() {{ window.parent.location.reload(); }}, 300);
                 return;
             }}
-
-            var m = Math.floor(s / 60);
-            var sec = s % 60;
-
-            document.getElementById("t").innerHTML =
-                (m < 10 ? "0" : "") + m + ":" +
-                (sec < 10 ? "0" : "") + sec;
-
+            var m = Math.floor(s / 60), sec = s % 60;
+            document.getElementById("t").innerHTML = (m<10?"0":"")+m+":"+(sec<10?"0":"")+sec;
             s--;
         }}
-
-        u();
-
-        setInterval(u, 1000);
+        u(); setInterval(u, 1000);
     </script>
     """, height=45)
 
@@ -1010,27 +1024,17 @@ st.title("🐍 Advanced Programming Portal")
 
 if not st.session_state.auth_verified:
     st.subheader("Final Exam Portal Login")
-    tab1, tab2 = st.tabs(["Sign In", "Create Student Profile"])
-    with tab1:
-        with st.form("login_form"):
-            email_input = st.text_input("School Email").strip()
-            pass_input = st.text_input("Access Password", type="password")
-            if st.form_submit_button("Authenticate Access", use_container_width=True):
-                try:
-                    res = firebase_sign_in_email_password(email_input, pass_input)
-                    persist_auth_cookie(res["id_token"])
-                    st.rerun()
-                except Exception as ex:
-                    st.error(f"Login Rejected: {ex}")
-    with tab2:
-        with st.form("register_profile_form"):
-            reg_id = st.text_input("Student ID Number").strip()
-            reg_first = st.text_input("First Name").strip()
-            reg_last = st.text_input("Last Name").strip()
-            reg_period = st.selectbox("Class Period", PERIOD_OPTIONS)
-            if st.form_submit_button("Register Profile", use_container_width=True) and reg_id and reg_first and reg_last:
-                if upsert_student_profile(reg_id, reg_last, reg_first, reg_period):
-                    st.success("Profile saved! You can now log in.")
+    # Clean Sign-In Form interface. Register Profile form moved to teacher dashboard.
+    with st.form("login_form"):
+        email_input = st.text_input("School Email").strip()
+        pass_input = st.text_input("Access Password", type="password")
+        if st.form_submit_button("Authenticate Access", use_container_width=True):
+            try:
+                res = firebase_sign_in_email_password(email_input, pass_input)
+                persist_auth_cookie(res["id_token"])
+                st.rerun()
+            except Exception as ex:
+                st.error(f"Login Rejected: {ex}")
     st.stop()
 
 auth_user = st.session_state.auth_user
@@ -1038,18 +1042,9 @@ auth_uid = auth_user["uid"]
 user_email = auth_user["email"]
 
 if not st.session_state.is_teacher and st.session_state.student_profile is None:
-
-    found_profile = get_student_profile_by_email(user_email)
-
-    if found_profile:
-        st.session_state.student_profile = found_profile
-    else:
-        st.session_state.student_profile = {
-            "student_id": "STU-" + auth_uid[:6].upper(),
-            "first_name": "Student",
-            "last_name": "",
-            "period": "Unassigned"
-        }
+    st.session_state.student_profile = get_student_profile_by_email(user_email) or {
+        "student_id": "STU-" + auth_uid[:6].upper(), "first_name": user_email.split("@")[0], "last_name": "", "period": "Unassigned"
+    }
 
 if st.session_state.auth_verified and not st.session_state.is_teacher and not st.session_state.exam_finished:
     attempt = load_exam_attempt(auth_uid)
@@ -1107,6 +1102,28 @@ if st.session_state.is_teacher:
     with t_tabs[1]:
         st.dataframe(load_student_profiles(), use_container_width=True)
 
+    with t_tabs[2]:
+        st.subheader("Roster Management Form")
+        st.write("Add new student profiles and credential pairings to the secure database roster:")
+        with st.form("register_profile_form"):
+            reg_id = st.text_input("Student ID Number").strip()
+            reg_first = st.text_input("First Name").strip()
+            reg_last = st.text_input("Last Name").strip()
+            reg_email = st.text_input("Student Email Address").strip()
+            reg_password = st.text_input("Set Access Password (Min. 6 chars)", type="password").strip()
+            reg_period = st.selectbox("Class Period", PERIOD_OPTIONS)
+            
+            if st.form_submit_button("Register Student Profile", use_container_width=True):
+                if reg_id and reg_first and reg_last and reg_email and reg_password:
+                    if len(reg_password) < 6:
+                        st.error("⚠️ Authentication security requires a password at least 6 characters long.")
+                    else:
+                        if upsert_student_profile(reg_id, reg_last, reg_first, reg_period, reg_email, reg_password):
+                            st.success(f"🎉 Successfully provisioned secure access profile for **{reg_first} {reg_last}**!")
+                            st.rerun()
+                else:
+                    st.error("⚠️ Please fill out all required fields (ID, First Name, Last Name, Email, and Password).")
+
 # --- STUDENT ASSESSMENT INTERFACE WORKFLOW ---
 else:
     st.markdown('<div class="quiz-shell">', unsafe_allow_html=True)
@@ -1154,13 +1171,12 @@ else:
         st.markdown('<div class="question-box"><div class="question-title">Final Exam Instructions</div>', unsafe_allow_html=True)
         st.write("You will answer one question at a time.")
         st.write(f"You have **{QUIZ_DURATION_MINUTES} minutes** to complete the exam.")
-        st.write("If you refresh or close the browser, even if you log out, the timer keeps running in the background.")
-        st.write("Your score will be saved automatically when you finish the exam.")
+        st.write("If you refresh or close the browser, the timer keeps running in the background.")
+        st.write("Your score will be saved automatically when you finish each question.")
+        st.write("You need to score 84% or higher to pass the exam.")
         st.write("After you submit an answer, you will receive immediate feedback and your answer will be locked in for that question.")
         st.write("You can start the exam at any time, but once you begin, the timer will start and cannot be paused.")
-        st.write("Make sure you submit your answers before the timer runs out. If time expires, the exam will end and your scores will be recorded.")
-        st.write("You need to answer each question to move on to the next one.")
-        st.write("You need to score 84% or higher to pass the exam.")
+        st.write("Make sure you submit your answers before the timer runs out. If time expires, the exam will end.")
         st.error("⚠️ FINAL EXAM WARNING: Read each question carefully. After you submit an answer, you cannot go back and change it.")
         
         if st.button("Start Final Exam", use_container_width=True):
@@ -1182,6 +1198,7 @@ else:
         
         question = current_question()
         if question:
+            # HTML format support enabled
             st.markdown(f'<div class="question-box"><div class="question-title">Q{st.session_state.current_question_index + 1}. {question["question"]}</div>', unsafe_allow_html=True)
 
             if question["type"] == "mc":
@@ -1195,8 +1212,10 @@ else:
             elif question["type"] == "dropdown_sim":
                 if question.get("code"): 
                     st.markdown(f'<div class="code-box">{question["code"]}</div>', unsafe_allow_html=True)
-                for i, dd in enumerate(question["dropdowns"]): 
-                    st.selectbox(dd["label"], [""] + dd["options"], key=f"q_{question['id']}_dd_{i}")
+                
+                for i, dd in enumerate(question["dropdowns"]):
+                    visual_label = dd.get("label", dd.get("id", f"Dropdown {i + 1}"))
+                    st.selectbox(visual_label, [""] + dd["options"], key=f"q_{question['id']}_dd_{i}")
 
             if st.session_state.feedback:
                 fb = st.session_state.feedback
@@ -1218,4 +1237,4 @@ else:
                     st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("</div>", unsafe_allow_html=True)  
+    st.markdown("</div>", unsafe_allow_html=True)
