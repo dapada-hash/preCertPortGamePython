@@ -1047,10 +1047,23 @@ auth_user = st.session_state.auth_user
 auth_uid = auth_user["uid"]
 user_email = auth_user["email"]
 
-if not st.session_state.is_teacher and st.session_state.student_profile is None:
-    st.session_state.student_profile = get_student_profile_by_email(user_email) or {
-        "student_id": "STU-" + auth_uid[:6].upper(), "first_name": user_email.split("@")[0], "last_name": "", "period": "Unassigned"
-    }
+# ====================================================================
+# FIX: DYNAMIC EMAIL PROFILE ALIGNMENT GATEWAY (Stops stale cache mismatch)
+# ====================================================================
+if not st.session_state.is_teacher:
+    current_prof = st.session_state.student_profile
+    if current_prof is None or current_prof.get("email", "").strip().lower() != user_email.strip().lower():
+        fetched_prof = get_student_profile_by_email(user_email)
+        if fetched_prof:
+            st.session_state.student_profile = fetched_prof
+        else:
+            st.session_state.student_profile = {
+                "student_id": "STU-" + auth_uid[:6].upper(),
+                "first_name": user_email.split("@")[0],
+                "last_name": "",
+                "email": user_email,
+                "period": "Unassigned"
+            }
 
 if st.session_state.auth_verified and not st.session_state.is_teacher and not st.session_state.exam_finished:
     attempt = load_exam_attempt(auth_uid)
