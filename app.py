@@ -223,9 +223,9 @@ new_slice_to_6 = My_list[:6]""",
         "question": """Given grade=76 and rank=3, what is the output?
 
 if grade >= 80 and rank == 2:
-    <br>&nbsp;&nbsp;&nbsp;print("your grade is B")<br>
+    <br>&nbsp;&nbsp;&nbsp;print("your grade is B")
 elif grade < 70 and rank == 2:<br>  
-    <br>&nbsp;&nbsp;&nbsp;print("your grade is C") <br> 
+    <br>&nbsp;&nbsp;&nbsp;print("your grade is C") 
 else:<br>
     <br>&nbsp;&nbsp;&nbsp;print("your grade is F")""",
         "type": "mc",
