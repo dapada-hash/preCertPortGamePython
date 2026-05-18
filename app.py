@@ -453,6 +453,21 @@ Which two functions should you use? Each correct answer presents a complete solu
         "options": ["A. 100", "B. 105.0", "C. 5.0", "D. TypeError: missing 1 required positional argument"],
         "answer": "B. 105.0",
     },
+    {
+    "id": 29,
+    "question": """What is the output of the following Python code?
+
+<br>&nbsp;&nbsp;&nbsp;&nbsp;def greet(name, uppercase=False):
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if uppercase:
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return f"HELLO {name.upper()}"
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return f"Hello {name}"
+<br>&nbsp;&nbsp;&nbsp;&nbsp;
+<br>&nbsp;&nbsp;&nbsp;&nbsp;result = greet("Sam", True)
+<br>&nbsp;&nbsp;&nbsp;&nbsp;print(result)""",
+    "type": "mc",
+    "options": ["A. Hello Sam", "B. HELLO SAM", "C. HELLO Sam", "D. Hello SAM"],
+    "answer": "B. HELLO SAM",
+},
 ]
 
 # =================================================
