@@ -114,39 +114,39 @@ QUIZ_QUESTIONS = [
     "answer": "5.0"
 },
     {
-        "id": 4,
-        "question": "Complete the Python script below by selecting the correct options.",
-        "type": "dropdown_sim",
-        "code": """import os
+    "id": 4,
+    "question": "Complete the Python script below by selecting the correct options directly inside the code:",
+    "type": "dropdown_sim",
+    "code": """import os
 file_name = "my_document.txt"
 text_to_write = "This line will be added to the end.\\n"
 
-if os.path.[DROPDOWN 1](file_name):
+if os.path.[DD1](file_name):
     print(f"File '{file_name}' exists. Append text.")
-    file = open(file_name, <u>DROPDOWN 2<u/>)
-    [DROPDOWN 3](text_to_write)
+    file = open(file_name, [DD2])
+    [DD3](text_to_write)
     file.close()
 else:
     print(f"File '{file_name}' does not exist. No file was opened or written to")""",
-        "dropdowns": [
-            {
-                "label": "DROPDOWN 1 (os.path Method)",
-                "options": ["get_status", "exists", "isfile", "check_file"],
-                "answer": "exists",
-            },
-            {
-                "label": "DROPDOWN 2 (File Mode)",
-                "options": ["'r'", "'w'", "'a'", "'r+'"],
-                "answer": "'a'",
-            },
-            {
-                "label": "DROPDOWN 3 (File Object Method)",
-                "options": ["file.read", "file.write", "file.append", "file.close"],
-                "answer": "file.write",
-            },
-        ],
-        "answer": ["exists", "'a'", "file.write"],
-    },
+    "dropdowns": [
+        {
+            "id": "DD1",
+            "options": ["get_status", "exists", "isfile", "check_file"],
+            "answer": "exists"
+        },
+        {
+            "id": "DD2",
+            "options": ["'r'", "'w'", "'a'", "'r+'"],
+            "answer": "'a'"
+        },
+        {
+            "id": "DD3",
+            "options": ["file.read", "file.write", "file.append", "file.close"],
+            "answer": "file.write"
+        }
+    ],
+    "answer": ["exists", "'a'", "file.write"]
+},
     {
         "id": 5,
         "question": "Select the correct options to make the unittest code valid.",
