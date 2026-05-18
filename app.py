@@ -703,17 +703,41 @@ def load_student_profiles():
         return []
 
 
-def upsert_student_profile(student_id: str, last_name: str, first_name: str, period: str):
+def upsert_student_profile(student_id: str, last_name: str, first_name: str, period: str, email: str, password: str = None):
     try:
+        clean_email = email.strip().lower()
+        # 1. Save profile details securely inside Firestore
         db().collection(STUDENT_PROFILES_COLLECTION).document(student_id).set({
             "student_id": student_id,
             "last_name": last_name,
             "first_name": first_name,
             "period": period,
+            "email": clean_email,
             "updated_at": now_utc(),
         }, merge=True)
+
+        # 2. Provision Auth credentials inside Firebase Auth database
+        try:
+            user = firebase_auth.get_user_by_email(clean_email)
+            if password and password.strip():
+                firebase_auth.update_user(user.uid, password=password)
+        except firebase_auth.UserNotFoundError:
+            create_args = {
+                "email": clean_email,
+                "display_name": f"{first_name} {last_name}".strip(),
+            }
+            if password and password.strip():
+                create_args["password"] = password
+            
+            try:
+                # Use sanitized student_id as UID for relational simplicity
+                firebase_auth.create_user(uid=student_id, **create_args)
+            except Exception:
+                # Fallback to random UID if student_id contains Auth-incompatible characters
+                firebase_auth.create_user(**create_args)
         return True
-    except Exception:
+    except Exception as e:
+        st.error(f"Failed to register authentication credentials: {e}")
         return False
 
 
@@ -801,6 +825,12 @@ def save_final_exam_result(auth_uid: str, student_profile: dict, score: int, tot
 def get_student_profile_by_email(email: str):
     try:
         clean_email = email.strip().lower()
+        # Direct email lookups
+        docs = db().collection(STUDENT_PROFILES_COLLECTION).where("email", "==", clean_email).stream()
+        for d in docs:
+            return d.to_dict()
+
+        # Fallback profile lookup matching engine
         docs = db().collection(STUDENT_PROFILES_COLLECTION).stream()
         for d in docs:
             v = d.to_dict()
@@ -1074,19 +1104,25 @@ if st.session_state.is_teacher:
 
     with t_tabs[2]:
         st.subheader("Roster Management Form")
-        st.write("Add new student profiles to the secure exam database roster:")
+        st.write("Add new student profiles and credential pairings to the secure database roster:")
         with st.form("register_profile_form"):
             reg_id = st.text_input("Student ID Number").strip()
             reg_first = st.text_input("First Name").strip()
             reg_last = st.text_input("Last Name").strip()
+            reg_email = st.text_input("Student Email Address").strip()
+            reg_password = st.text_input("Set Access Password (Min. 6 chars)", type="password").strip()
             reg_period = st.selectbox("Class Period", PERIOD_OPTIONS)
+            
             if st.form_submit_button("Register Student Profile", use_container_width=True):
-                if reg_id and reg_first and reg_last:
-                    if upsert_student_profile(reg_id, reg_last, reg_first, reg_period):
-                        st.success(f"Profile for **{reg_first} {reg_last}** saved successfully!")
-                        st.rerun()
+                if reg_id and reg_first and reg_last and reg_email and reg_password:
+                    if len(reg_password) < 6:
+                        st.error("⚠️ Authentication security requires a password at least 6 characters long.")
+                    else:
+                        if upsert_student_profile(reg_id, reg_last, reg_first, reg_period, reg_email, reg_password):
+                            st.success(f"🎉 Successfully provisioned secure access profile for **{reg_first} {reg_last}**!")
+                            st.rerun()
                 else:
-                    st.error("Please fill out all input fields (ID, First Name, and Last Name).")
+                    st.error("⚠️ Please fill out all required fields (ID, First Name, Last Name, Email, and Password).")
 
 # --- STUDENT ASSESSMENT INTERFACE WORKFLOW ---
 else:
