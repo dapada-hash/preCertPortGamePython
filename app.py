@@ -437,43 +437,43 @@ print(formatted)""",
     },
     {
         "id": 25,
-        "question": """You are writing code that generates a random integer with a minimum value of 5 and a maximum value of 11.
+        "question": """You are writing code that generates a random integer with a minimum value of 3 and a maximum value of 10.
 Which two functions should you use? Each correct answer presents a complete solution. (Choose two.)""",
         "type": "mc_multi",
         "options": [
-            "A. random.randint(5, 12)",
-            "B. random.randint(5, 11)",
-            "C. random.randrange(5, 12, 1)",
-            "D. random.randrange(5, 11, 1)",
+            "A. random.randint(3, 12)",
+            "B. random.randint(3, 10)",
+            "C. random.randrange(3, 11, 1)",
+            "D. random.randrange(3, 12, 1)",
         ],
         "answer": [
-            "B. random.randint(5, 11)",
-            "C. random.randrange(5, 12, 1)",
+            "B. random.randint(3, 10)",
+            "C. random.randrange(3, 11, 1)",
         ],
     },
     {
     "id": 26,
-    "question": "What is the output of the following Python code?<br><br>&nbsp;&nbsp;&nbsp;&nbsp;items = ['apple', 'banana', 'cherry']<br>&nbsp;&nbsp;&nbsp;&nbsp;items.append('date')<br>&nbsp;&nbsp;&nbsp;&nbsp;items.insert(1, 'blueberry')<br>&nbsp;&nbsp;&nbsp;&nbsp;print(items[2])",
+    "question": "What is the output of the following Python code?<br><br>&nbsp;&nbsp;&nbsp;&nbsp;items = ['a', 'c', 'e']<br>&nbsp;&nbsp;&nbsp;&nbsp;items.append('g')<br>&nbsp;&nbsp;&nbsp;&nbsp;items.insert(1, 's')<br>&nbsp;&nbsp;&nbsp;&nbsp;print(items[2])",
     "type": "mc",
     "options": [
-        "A. blueberry",
-        "B. banana",
-        "C. cherry",
-        "D. apple"
+        "A. e",
+        "B. a",
+        "C. s",
+        "D. c"
     ],
-    "answer": "B. banana"
+    "answer": "D. c"
     },
     {
     "id": 27,
     "question": """What is the output of the following Python code?
 
 <br>&nbsp;&nbsp;&nbsp;&nbsp;total = 0
-<br>&nbsp;&nbsp;&nbsp;&nbsp;for i in range(1, 4):
+<br>&nbsp;&nbsp;&nbsp;&nbsp;for i in range(2, 5):
 <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;total += i
 <br>&nbsp;&nbsp;&nbsp;&nbsp;print(total)""",
     "type": "mc",
-    "options": ["A. 3", "B. 6", "C. 10", "D. 0"],
-    "answer": "B. 6",
+    "options": ["A. 3", "B. 9", "C. 5", "D. 7"],
+    "answer": "B. 9",
 },
 {
         "id": 28,
@@ -492,16 +492,16 @@ Which two functions should you use? Each correct answer presents a complete solu
     "id": 29,
     "question": """What is the output of the following Python code?
 
-<br>&nbsp;&nbsp;&nbsp;&nbsp;def greet(name, uppercase=False):
+<br>&nbsp;&nbsp;&nbsp;&nbsp;def greet(name, uppercase=True):
 <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if uppercase:
 <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return f"HELLO {name.upper()}"
 <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return f"Hello {name}"
 <br>&nbsp;&nbsp;&nbsp;&nbsp;
-<br>&nbsp;&nbsp;&nbsp;&nbsp;result = greet("Sam", True)
+<br>&nbsp;&nbsp;&nbsp;&nbsp;result = greet("Sam", False)
 <br>&nbsp;&nbsp;&nbsp;&nbsp;print(result)""",
     "type": "mc",
     "options": ["A. Hello Sam", "B. HELLO SAM", "C. HELLO Sam", "D. Hello SAM"],
-    "answer": "B. HELLO SAM",
+    "answer": "A. Hello Sam",
 },
 ]
 
