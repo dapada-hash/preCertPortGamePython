@@ -213,7 +213,7 @@ new_slice_to_6 = My_list[:6]""",
     },
     {
         "id": 8,
-        "question": "Given the command 'main.py this beautiful nature', which value is stored at index position 1 in the sys.argv list?",
+        "question": "Given the command 'main.py Jesus is love', which value is stored at index position 1 in the sys.argv list?",
         "type": "mc",
         "options": ["main.py", "Jesus", "is", "love"],
         "answer": "Jesus",
