@@ -503,6 +503,26 @@ Which two functions should you use? Each correct answer presents a complete solu
     "options": ["A. Hello Sam", "B. HELLO SAM", "C. HELLO Sam", "D. Hello SAM"],
     "answer": "A. Hello Sam",
 },
+{
+    "id": 10,
+    "question": """Analyze the following nested loop code:
+
+<br>&nbsp;&nbsp;&nbsp;&nbsp;row = 2
+<br>&nbsp;&nbsp;&nbsp;&nbsp;while row == 3:
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;print(f"Outer Loop (Row) # {row}:")
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;for col in range(1, 4):
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;print(f"Inner Loop Value: {col}")
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;row += 1
+<br><br>What is the visual behavior of the print statement output? """,
+    "type": "mc",
+    "options": [
+        "Nothing is printed",
+        "Prints three rows, each followed by three inner loop values (1, 2, and 3).",
+        "The code produces an infinite loop.",
+        "Prints 'Outer Loop (Row) # 3:' and 'Inner Loop Value: 1 2 3' only."
+    ],
+    "answer": "Nothing is printed."
+},
 ]
 
 # =================================================
